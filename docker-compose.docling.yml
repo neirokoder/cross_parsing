@@ -1,0 +1,16 @@
+# Docling Serve (CPU) — парсинг PDF без OCR и без OCR-парсинга формул.
+# HTML-результаты сохраняются локально (data/html/), чтобы не гонять Docling дважды.
+#
+# Запуск:  docker compose -f docker-compose.docling.yml up -d
+# API:     http://localhost:5001  (health: /health)
+services:
+  docling-serve:
+    image: quay.io/docling-project/docling-serve-cpu:latest
+    container_name: docling-serve-cpu
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - model-artifacts:/root/.cache
+volumes:
+  model-artifacts:

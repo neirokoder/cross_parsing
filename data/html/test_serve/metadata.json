@@ -1,0 +1,33 @@
+{
+  "source": {
+    "file_name": "2-020101-174-12.pdf",
+    "file_hash_sha256": "68c531a9c8893f36e9a043722aa3fe9c5340f1da764d50a178ab9c48eabfe2d3",
+    "page_count": 2
+  },
+  "pages": [
+    {
+      "page": 1,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 2,
+      "width": 595.3,
+      "height": 841.9
+    }
+  ],
+  "formula_bboxes": {},
+  "docling": {
+    "do_ocr": false,
+    "do_formula_enrichment": false,
+    "do_table_structure": true,
+    "image_mode": "referenced",
+    "serve_url": "http://localhost:5001"
+  },
+  "generated_at": "2026-08-10T19:11:53",
+  "html_files": [
+    "page_0001.html",
+    "page_0002.html"
+  ],
+  "saved_media_images": 0
+}

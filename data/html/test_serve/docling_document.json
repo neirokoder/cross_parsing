@@ -1,0 +1,493 @@
+{
+ "schema_name": "DoclingDocument",
+ "version": "1.10.0",
+ "name": "2-020101-174-12",
+ "origin": {
+  "mimetype": "application/pdf",
+  "binary_hash": 8695215342558896851,
+  "filename": "2-020101-174-12.pdf",
+  "uri": null
+ },
+ "furniture": {
+  "self_ref": "#/furniture",
+  "parent": null,
+  "children": [],
+  "content_layer": "furniture",
+  "meta": null,
+  "name": "_root_",
+  "label": "unspecified"
+ },
+ "body": {
+  "self_ref": "#/body",
+  "parent": null,
+  "children": [
+   {
+    "cref": "#/texts/0"
+   },
+   {
+    "cref": "#/texts/1"
+   },
+   {
+    "cref": "#/texts/2"
+   },
+   {
+    "cref": "#/texts/3"
+   },
+   {
+    "cref": "#/texts/4"
+   },
+   {
+    "cref": "#/texts/5"
+   },
+   {
+    "cref": "#/texts/6"
+   },
+   {
+    "cref": "#/pictures/0"
+   },
+   {
+    "cref": "#/texts/7"
+   },
+   {
+    "cref": "#/texts/8"
+   },
+   {
+    "cref": "#/texts/9"
+   },
+   {
+    "cref": "#/texts/10"
+   },
+   {
+    "cref": "#/texts/11"
+   }
+  ],
+  "content_layer": "body",
+  "meta": null,
+  "name": "_root_",
+  "label": "unspecified"
+ },
+ "groups": [],
+ "texts": [
+  {
+   "self_ref": "#/texts/0",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 126.02,
+      "t": 779.5411029101564,
+      "r": 482.1867200000004,
+      "b": 766.9482313079463,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      38
+     ]
+    }
+   ],
+   "orig": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+   "text": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/1",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "text",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 421.39,
+      "t": 731.9771029101563,
+      "r": 522.88912,
+      "b": 722.0750158383331,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      18
+     ]
+    }
+   ],
+   "orig": "Версия: 01.07.2024",
+   "text": "Версия: 01.07.2024",
+   "formatting": null,
+   "hyperlink": null
+  },
+  {
+   "self_ref": "#/texts/2",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 189.77,
+      "t": 609.8439829101562,
+      "r": 431.734,
+      "b": 566.7914304239684,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      7
+     ]
+    }
+   ],
+   "orig": "ПРАВИЛА",
+   "text": "ПРАВИЛА",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/3",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 105.5,
+      "t": 553.5819829101563,
+      "r": 509.452,
+      "b": 498.4557066670624,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      39
+     ]
+    }
+   ],
+   "orig": "КЛАССИФИКАЦИИ И ПОСТРОЙКИ МОРСКИХ СУДОВ",
+   "text": "КЛАССИФИКАЦИИ И ПОСТРОЙКИ МОРСКИХ СУДОВ",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/4",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 255.89,
+      "t": 465.2591029101563,
+      "r": 357.96112,
+      "b": 447.2846622471729,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      9
+     ]
+    }
+   ],
+   "orig": "ЧАСТЬ XII",
+   "text": "ЧАСТЬ XII",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/5",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 190.13,
+      "t": 437.0888629101563,
+      "r": 422.46687999999995,
+      "b": 422.7738892084989,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      21
+     ]
+    }
+   ],
+   "orig": "ХОЛОДИЛЬНЫЕ УСТАНОВКИ",
+   "text": "ХОЛОДИЛЬНЫЕ УСТАНОВКИ",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/6",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "text",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 253.25,
+      "t": 369.5271029101563,
+      "r": 358.09911999999997,
+      "b": 359.62501583833307,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      17
+     ]
+    }
+   ],
+   "orig": "НД № 2-020101-174",
+   "text": "НД № 2-020101-174",
+   "formatting": null,
+   "hyperlink": null
+  },
+  {
+   "self_ref": "#/texts/7",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 245.69,
+      "t": 119.80110291015626,
+      "r": 366.37312000000003,
+      "b": 107.20823130794633,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      15
+     ]
+    }
+   ],
+   "orig": "Санкт-Петербург",
+   "text": "Санкт-Петербург",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/8",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "section_header",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 81.264,
+      "t": 779.8559829101563,
+      "r": 530.356,
+      "b": 769.0928447886093,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      59
+     ]
+    }
+   ],
+   "orig": "ПРАВИЛА КЛАССИФИКАЦИИ И ПОСТРОЙКИ МОРСКИХ СУДОВ (ЧАСТЬ XII)",
+   "text": "ПРАВИЛА КЛАССИФИКАЦИИ И ПОСТРОЙКИ МОРСКИХ СУДОВ (ЧАСТЬ XII)",
+   "formatting": null,
+   "hyperlink": null,
+   "level": 1
+  },
+  {
+   "self_ref": "#/texts/9",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "text",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 78.024,
+      "t": 743.1371029101563,
+      "r": 533.3176,
+      "b": 695.315015838333,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      254
+     ]
+    }
+   ],
+   "orig": "Настоящая  версия  части  XII  «Холодильные  установки»  Правил  классификации и постройки  морских  судов  Российского  морского  регистра  судоходства  (РС, Регистр) утверждена в соответствии с действующим положением и вступает в силу 1 июля 2024 года.",
+   "text": "Настоящая  версия  части  XII  «Холодильные  установки»  Правил  классификации и постройки  морских  судов  Российского  морского  регистра  судоходства  (РС, Регистр) утверждена в соответствии с действующим положением и вступает в силу 1 июля 2024 года.",
+   "formatting": null,
+   "hyperlink": null
+  },
+  {
+   "self_ref": "#/texts/10",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "text",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 78.024,
+      "t": 692.4971029101563,
+      "r": 533.32912,
+      "b": 657.275015838333,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      227
+     ]
+    }
+   ],
+   "orig": "Настоящая  версия  составлена  на  основании  версии  от  28  апреля  2023 года и Бюллетеня изменений № 24-126872 с учетом изменений и дополнений, подготовленных непосредственно к моменту опубликования (см. Перечень изменений).",
+   "text": "Настоящая  версия  составлена  на  основании  версии  от  28  апреля  2023 года и Бюллетеня изменений № 24-126872 с учетом изменений и дополнений, подготовленных непосредственно к моменту опубликования (см. Перечень изменений).",
+   "formatting": null,
+   "hyperlink": null
+  },
+  {
+   "self_ref": "#/texts/11",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "furniture",
+   "meta": null,
+   "label": "page_footer",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 274.37,
+      "t": 45.741102910156314,
+      "r": 533.32912,
+      "b": 35.839015838333125,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      46
+     ]
+    }
+   ],
+   "orig": "© Российский морской регистр судоходства, 2024",
+   "text": "© Российский морской регистр судоходства, 2024",
+   "formatting": null,
+   "hyperlink": null
+  }
+ ],
+ "pictures": [
+  {
+   "self_ref": "#/pictures/0",
+   "parent": {
+    "cref": "#/body"
+   },
+   "children": [],
+   "content_layer": "body",
+   "meta": null,
+   "label": "picture",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 252.5974578857422,
+      "t": 311.55438232421875,
+      "r": 354.8454895019531,
+      "b": 208.50628662109375,
+      "coord_origin": "BOTTOMLEFT"
+     },
+     "charspan": [
+      0,
+      0
+     ]
+    }
+   ],
+   "captions": [],
+   "references": [],
+   "footnotes": [],
+   "image": null,
+   "annotations": []
+  }
+ ],
+ "tables": [],
+ "key_value_items": [],
+ "form_items": [],
+ "pages": {
+  "1": {
+   "size": {
+    "width": 595.3200073242188,
+    "height": 841.9199829101562
+   },
+   "image": null,
+   "page_no": 1
+  },
+  "2": {
+   "size": {
+    "width": 595.3200073242188,
+    "height": 841.9199829101562
+   },
+   "image": null,
+   "page_no": 2
+  }
+ }
+}

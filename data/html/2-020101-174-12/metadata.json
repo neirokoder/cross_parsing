@@ -1,0 +1,265 @@
+{
+  "source": {
+    "file_name": "2-020101-174-12.pdf",
+    "file_hash_sha256": "68c531a9c8893f36e9a043722aa3fe9c5340f1da764d50a178ab9c48eabfe2d3",
+    "page_count": 41
+  },
+  "pages": [
+    {
+      "page": 1,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 2,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 3,
+      "width": 841.9,
+      "height": 595.3
+    },
+    {
+      "page": 4,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 5,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 6,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 7,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 8,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 9,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 10,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 11,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 12,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 13,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 14,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 15,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 16,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 17,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 18,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 19,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 20,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 21,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 22,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 23,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 24,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 25,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 26,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 27,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 28,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 29,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 30,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 31,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 32,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 33,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 34,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 35,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 36,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 37,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 38,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 39,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 40,
+      "width": 595.3,
+      "height": 841.9
+    },
+    {
+      "page": 41,
+      "width": 595.3,
+      "height": 841.9
+    }
+  ],
+  "formula_bboxes": {},
+  "docling": {
+    "do_ocr": false,
+    "do_formula_enrichment": false,
+    "do_table_structure": true,
+    "image_mode": "referenced"
+  },
+  "generated_at": "test",
+  "html_files": [
+    "page_0001.html",
+    "page_0002.html",
+    "page_0003.html",
+    "page_0004.html",
+    "page_0005.html",
+    "page_0006.html",
+    "page_0007.html",
+    "page_0008.html",
+    "page_0009.html",
+    "page_0010.html",
+    "page_0011.html",
+    "page_0012.html",
+    "page_0013.html",
+    "page_0014.html",
+    "page_0015.html",
+    "page_0016.html",
+    "page_0017.html",
+    "page_0018.html",
+    "page_0019.html",
+    "page_0020.html",
+    "page_0021.html",
+    "page_0022.html",
+    "page_0023.html",
+    "page_0024.html",
+    "page_0025.html",
+    "page_0026.html",
+    "page_0027.html",
+    "page_0028.html",
+    "page_0029.html",
+    "page_0030.html",
+    "page_0031.html",
+    "page_0032.html",
+    "page_0033.html",
+    "page_0034.html",
+    "page_0035.html",
+    "page_0036.html",
+    "page_0037.html",
+    "page_0038.html",
+    "page_0039.html",
+    "page_0040.html",
+    "page_0041.html"
+  ]
+}
