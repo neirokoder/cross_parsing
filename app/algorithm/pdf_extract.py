@@ -226,6 +226,73 @@ def _flush_enriched_paragraph(blocks: List[Dict], bbox_map: Dict, pno: int,
 
 
 # ---------------------------------------------------------------------------
+# Титульная страница: уровни заголовков из кегля PDF
+# ---------------------------------------------------------------------------
+_TITLE_LOGO_RE = re.compile(r'регистр судоходства')
+
+
+def fix_title_page_headings(json_result: Dict, pdf_path: str) -> int:
+    """
+    Docling «уплощает» заголовки титульной страницы в h2; уровни восстанавливаем
+    по кеглю шрифта из PDF: относительно максимального кегля страницы
+    (≥0.7 → 1, ≥0.45 → 2, иначе → 3). На титуле РС-правил это 48→1, 24→2, 20/16→3.
+
+    Логотип издателя «РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА» — не заголовок,
+    переводится в paragraph.
+    """
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    headings = [b for b in blocks
+                if b.get('type') == 'heading' and b.get('page number') == 1]
+    if not headings:
+        return 0
+    pdf = fitz.open(pdf_path)
+    try:
+        page = pdf[0]
+        sizes: Dict[str, float] = {}
+        for b in page.get_text('dict', sort=True)['blocks']:
+            if b['type'] != 0:
+                continue
+            for line in b['lines']:
+                t = ''.join(s['text'] for s in line['spans']).strip()
+                if not t:
+                    continue
+                t_norm = _norm(t)
+                sizes[t_norm] = max(sizes.get(t_norm, 0.0),
+                                    max(s['size'] for s in line['spans']))
+    finally:
+        pdf.close()
+    max_size = max(sizes.values()) if sizes else 0.0
+    if not max_size:
+        return 0
+    changed = 0
+    for b in headings:
+        norm = _norm(b.get('content') or '')
+        size = None
+        if norm in sizes:
+            size = sizes[norm]
+        else:
+            for key, s in sizes.items():
+                if len(norm) > 12 and (norm in key or key in norm):
+                    size = max(size or 0.0, s)
+        if size is None:
+            continue
+        if _TITLE_LOGO_RE.search(norm):
+            b['type'] = 'paragraph'
+            b.pop('heading level', None)
+            changed += 1
+            continue
+        ratio = size / max_size
+        if ratio >= 0.7:
+            b['heading level'] = 1
+        elif ratio >= 0.45:
+            b['heading level'] = 2
+        else:
+            b['heading level'] = 3
+        changed += 1
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # Enrich: добор пропущенного Docling'ом
 # ---------------------------------------------------------------------------
 def enrich_blocks_from_pdf(

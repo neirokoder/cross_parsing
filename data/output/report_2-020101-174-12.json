@@ -21,9 +21,9 @@
       "f1": 1.0
     },
     "heading": {
-      "etalon": 53,
-      "result": 53,
-      "matched": 53,
+      "etalon": 52,
+      "result": 52,
+      "matched": 52,
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0
@@ -45,9 +45,9 @@
       "f1": 1.0
     },
     "paragraph": {
-      "etalon": 164,
-      "result": 164,
-      "matched": 164,
+      "etalon": 165,
+      "result": 165,
+      "matched": 165,
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0

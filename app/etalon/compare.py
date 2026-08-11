@@ -158,9 +158,10 @@ def _greedy_match(
 def _structure_fingerprint(block: Dict) -> Dict:
     """Ключевые структурные признаки блока для сверки формата JSON.
 
-    Структура = форма JSON (тип, вложенность), а не семантика:
-    heading level не сравнивается — Docling «уплощает» заголовки титульной
-    страницы в h2, уровни в эталоне проставлены вручную, из HTML их не вывести.
+    Структура = форма JSON (тип, вложенность): таблица (columns/rows),
+    список (items), image (image_key), formula (content/image_key).
+    Уровень заголовка Docling даёт сам (h1..h6), на титуле его «уплощение»
+    в h2 исправляется по кеглю PDF (fix_title_page_headings).
     """
     btype = block.get('type', 'unknown')
     if btype == 'table':
@@ -168,6 +169,8 @@ def _structure_fingerprint(block: Dict) -> Dict:
                           len(block.get('rows', []) or [])]}
     if btype == 'list':
         return {'list': len(block.get('items', []) or [])}
+    if btype == 'heading':
+        return {'heading': block.get('heading level')}
     if btype == 'image':
         return {'image': block.get('image_key')}
     if btype == 'formula':

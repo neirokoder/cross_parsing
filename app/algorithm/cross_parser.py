@@ -288,6 +288,10 @@ def cross_parse(
     try:
         bbox_map = pdf_extract.enrich_blocks_from_pdf(json_result, str(pdf_path))
 
+        # Титул: Docling «уплощает» заголовки в h2 — уровни из кегля PDF,
+        # логотип издателя «РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА» → paragraph
+        pdf_extract.fix_title_page_headings(json_result, str(pdf_path))
+
         # bbox нужен ДО extract_formula_images (IoU-отсев таблиц-растров)
         matched = pdf_extract.restore_bboxes(json_result, str(pdf_path), bbox_map)
         logger.info("Bbox: restored %d block positions", matched)

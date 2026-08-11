@@ -215,9 +215,8 @@
       ],
       "block": [
         {
-          "type": "heading",
+          "type": "paragraph",
           "page number": 1,
-          "heading level": 2,
           "content": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
           "bounding box": [
             0,
@@ -240,7 +239,7 @@
         {
           "type": "heading",
           "page number": 1,
-          "heading level": 2,
+          "heading level": 1,
           "content": "ПРАВИЛА",
           "bounding box": [
             0,
@@ -264,7 +263,7 @@
         {
           "type": "heading",
           "page number": 1,
-          "heading level": 2,
+          "heading level": 3,
           "content": "ЧАСТЬ XII",
           "bounding box": [
             0,
@@ -276,7 +275,7 @@
         {
           "type": "heading",
           "page number": 1,
-          "heading level": 2,
+          "heading level": 3,
           "content": "ХОЛОДИЛЬНЫЕ УСТАНОВКИ",
           "bounding box": [
             0,
@@ -5267,7 +5266,7 @@
             352.9700012207031,
             630.7899780273438
           ],
-          "_temp_path": "C:\\Users\\igr-z\\AppData\\Local\\Temp\\cross_parse_2-020101-174-12_6yn1jdeh\\page_1_1.png"
+          "_temp_path": "C:\\Users\\igr-z\\AppData\\Local\\Temp\\cross_parse_2-020101-174-12_sw7b72lt\\page_1_1.png"
         }
       ]
     },
