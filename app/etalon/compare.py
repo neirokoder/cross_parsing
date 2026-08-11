@@ -23,15 +23,24 @@ DEFAULT_SIM_THRESHOLD = 0.6
 def _norm_text(text: str) -> str:
     text = text or ''
     text = text.replace('\uf0d7', '\u00b7').replace('\uf044', '\u0394')
+    text = re.sub(r'[\uf000-\uf8ff]', '', text)  # прочие PUA Docling — шум
     text = re.sub(r'[\s\u00a0]+', ' ', text)
+    text = re.sub(r'[—–]', '-', text)
+    text = re.sub(r'\s+([,.;:])', r'\1', text)
+    text = re.sub(r'\(\s+', '(', text)
+    text = re.sub(r'\s+\)', ')', text)
+    text = re.sub(r'(?<=[а-яёa-z0-9])\s+(?=[0-9])', '', text)  # «м 3» → «м3»
     return text.strip().lower()
 
 
 def block_text(block: Dict) -> str:
-    """Полный текст блока (для таблиц — содержимое всех ячеек)."""
+    """Полный текст блока (для таблиц — содержимое всех ячеек + заголовки columns)."""
     btype = block.get('type', '')
     if btype == 'table':
         parts = []
+        for col in block.get('columns', []) or []:
+            if col:
+                parts.append(col)
         for row in block.get('rows', []):
             for cell in row.get('cells', []):
                 for cb in cell.get('block', []):
@@ -81,18 +90,23 @@ def _greedy_match(
     etalon: List[Dict],
     result: List[Dict],
     threshold: float,
-) -> Tuple[List[Optional[int]], List[bool], List[bool], List[Optional[str]]]:
+) -> Tuple[List[Optional[int]], List[bool], List[bool], List[bool]]:
     """
     Жадное сопоставление блоков эталона и результата.
 
+    Матч засчитывается только между блоками ОДНОГО типа на одной странице
+    (иначе возможны «совпадения из разных участков JSON»: например, heading
+    сходится по тексту с paragraph). Если у блока есть текстовый близнец
+    другого типа с sim >= threshold, пара не матчится, но фиксируется в
+    type_breaks (расхождение структуры по типу).
+
     Returns:
-        (matches_for_etalon, used_result, type_ok)
-        matches_for_etalon[i] = индекс блока результата или None
-        type_ok[i] = совпал ли тип
+        (matches_for_etalon, used_result, type_ok, type_breaks)
     """
     matches: List[Optional[int]] = [None] * len(etalon)
     used: List[bool] = [False] * len(result)
     type_ok: List[bool] = [False] * len(etalon)
+    type_breaks: List[bool] = [False] * len(etalon)
 
     # Сначала — точное совпадение текста на той же странице (лучшие кандидаты)
     for i, eb in enumerate(etalon):
@@ -111,24 +125,55 @@ def _greedy_match(
                         break
             continue
         best_j, best_sim = None, 0.0
+        wrong_j, wrong_sim = None, 0.0
         for j, rb in enumerate(result):
             if used[j] or rb.get('page number', 1) != ep:
                 continue
             rt = _norm_text(block_text(rb))
             if not rt:
                 continue
+            same_type = rb.get('type', 'unknown') == eb.get('type', 'unknown')
             if rt == et:
-                best_j, best_sim = j, 1.0
-                break
+                if same_type:
+                    best_j, best_sim = j, 1.0
+                    break
+                wrong_j, wrong_sim = j, 1.0
+                continue
             sim = _similarity(et, rt)
-            if sim > best_sim:
-                best_j, best_sim = j, sim
+            if same_type:
+                if sim > best_sim:
+                    best_j, best_sim = j, sim
+            elif sim > wrong_sim:
+                wrong_j, wrong_sim = j, sim
         if best_j is not None and best_sim >= threshold:
             matches[i] = best_j
             used[best_j] = True
-            type_ok[i] = eb.get('type') == result[best_j].get('type')
+            type_ok[i] = True
+        elif wrong_j is not None and wrong_sim >= threshold:
+            type_breaks[i] = True
 
-    return matches, used, type_ok
+    return matches, used, type_ok, type_breaks
+
+
+def _structure_fingerprint(block: Dict) -> Dict:
+    """Ключевые структурные признаки блока для сверки формата JSON.
+
+    Структура = форма JSON (тип, вложенность), а не семантика:
+    heading level не сравнивается — Docling «уплощает» заголовки титульной
+    страницы в h2, уровни в эталоне проставлены вручную, из HTML их не вывести.
+    """
+    btype = block.get('type', 'unknown')
+    if btype == 'table':
+        return {'table': [len(block.get('columns', []) or []),
+                          len(block.get('rows', []) or [])]}
+    if btype == 'list':
+        return {'list': len(block.get('items', []) or [])}
+    if btype == 'image':
+        return {'image': block.get('image_key')}
+    if btype == 'formula':
+        return {'formula': [bool((block.get('content') or '').strip()),
+                            bool(block.get('image_key'))]}
+    return {btype: None}
 
 
 def compare(
@@ -153,7 +198,8 @@ def compare(
         result_blocks = load_blocks(result_path)
     etalon_blocks = load_blocks(etalon_path)
 
-    matches, used, type_ok = _greedy_match(etalon_blocks, result_blocks, sim_threshold)
+    matches, used, type_ok, type_breaks = _greedy_match(
+        etalon_blocks, result_blocks, sim_threshold)
 
     matched = sum(1 for m in matches if m is not None)
     etalon_n = len(etalon_blocks)
@@ -163,16 +209,18 @@ def compare(
     recall = matched / etalon_n if etalon_n else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
 
-    # Text coverage: доля символов эталона, покрытая результатом
+    # Text coverage: доля символов эталона, покрытая результатом.
+    # Считаем через SequenceMatcher: посимвольный zip занижает оценку при
+    # вставках/удалениях (смещение выравнивания).
     etalon_chars = sum(len(_norm_text(block_text(b))) for b in etalon_blocks)
     matched_text = 0
     for i, m in enumerate(matches):
         if m is not None:
             et = _norm_text(block_text(etalon_blocks[i]))
             rt = _norm_text(block_text(result_blocks[m]))
-            n = min(len(et), len(rt))
-            common = sum(1 for a, b in zip(et, rt) if a == b) if n else 0
-            matched_text += common
+            for tag, a, b, _c, _d in SequenceMatcher(None, et, rt).get_opcodes():
+                if tag == 'equal':
+                    matched_text += (b - a)
     text_coverage = matched_text / etalon_chars if etalon_chars else 0.0
 
     # ---- by_type ----
@@ -230,8 +278,22 @@ def compare(
                 'type': b.get('type', 'unknown'),
                 'content': block_text(b)[:300],
             })
-    type_mismatch = sum(1 for i, b in enumerate(etalon_blocks)
-                        if matches[i] is not None and not type_ok[i])
+    type_mismatch = sum(type_breaks)
+
+    # ---- расхождения структуры JSON у совпавших пар ----
+    structure_mismatches = []
+    for i, j in enumerate(matches):
+        if j is None:
+            continue
+        ef = _structure_fingerprint(etalon_blocks[i])
+        rf = _structure_fingerprint(result_blocks[j])
+        if ef != rf:
+            structure_mismatches.append({
+                'page': etalon_blocks[i].get('page number', 1),
+                'type': etalon_blocks[i].get('type', 'unknown'),
+                'etalon': ef,
+                'result': rf,
+            })
 
     report = {
         'summary': {
@@ -243,11 +305,13 @@ def compare(
             'f1': round(f1, 3),
             'text_coverage': round(text_coverage, 3),
             'type_mismatch': type_mismatch,
+            'structure_mismatch': len(structure_mismatches),
             'sim_threshold': sim_threshold,
         },
         'by_type': by_type,
         'by_page': by_page,
         'missed': missed,
         'extra': extra,
+        'structure_mismatches': structure_mismatches,
     }
     return report

@@ -2,6 +2,17 @@ import re
 import unicodedata
 
 
+_SPACED_LETTERS_RE = re.compile(
+    r'\b[А-ЯA-Zа-яa-z]\b(?: [А-ЯA-Zа-яa-z]\b){2,}'
+)
+
+
+def remove_spaced_letters(text: str) -> str:
+    """Снимает разрядку: цепочки из >=3 одиночных букв через пробел
+    склеиваются: 'Т а б л и ц а 2.2.1' -> 'Таблица 2.2.1', 'Ж и л ы е' -> 'Жилые'."""
+    return _SPACED_LETTERS_RE.sub(lambda m: re.sub(r' ', '', m.group(0)), text)
+
+
 def soft_clean_line(line: str) -> str:
     """Мягкая чистка строки из сырого PDF: управляющие символы, повторы /n/n, пробелы."""
     cleaned = []

@@ -20,7 +20,7 @@ def render_markdown(report: Dict) -> str:
         "",
         f"- Эталон: **{s['etalon_blocks']}** блоков, Результат: **{s['result_blocks']}** блоков, Совпало: **{s['matched']}**",
         f"- Precision: **{s['precision']}** | Recall: **{s['recall']}** | F1: **{s['f1']}**",
-        f"- Text coverage: **{s['text_coverage']}** | Несовпадений типа: **{s['type_mismatch']}** (порог сходства: {s['sim_threshold']})",
+        f"- Text coverage: **{s['text_coverage']}** | Несовпадений типа: **{s['type_mismatch']}** | Расхождений структуры: **{s.get('structure_mismatch', 0)}** (порог сходства: {s['sim_threshold']})",
         "",
         "## По типам блоков",
         "",

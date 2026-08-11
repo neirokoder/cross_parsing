@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 import fitz
 
-from app.algorithm.text_cleaner import soft_clean_line, is_garbage_line
+from app.algorithm.text_cleaner import soft_clean_line, is_garbage_line, remove_spaced_letters
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +33,39 @@ _MATH_FONT_INDICATORS = ('math', 'symbol', 'mt extra', 'mathematical',
                           'pi', 'greek', 'monotype')
 
 _NUM_RE = re.compile(r'^[\d\s\-—\/]+$')
+# Буквы (вкл. греческие и математические курсивные символы) — «G= qS/r» валидна
+_LETTER_RE = re.compile(r'[А-Яа-яA-Za-z\u0370-\u03FF\U0001D400-\U0001D7FF]')
+_NUM_SUFFIX_RE = re.compile(r'[\d\s]+\s*$')          # хвост «...формуле 2 2»
+_FORMULA_NUM_RE = re.compile(r'^\(\d{1,2}(?:\.\d{1,2})+\)$')  # «(5.1.2)»
+# Подпись таблицы: «Таблица 2.2.1 Группа холодильного» → «Таблица 2.2.1» + хвост
+_TABLE_CAPT_RE = re.compile(r'^Таблица\s+\d{1,2}(?:\.\d{1,2}){1,2}($|\s)')
 
 
 # ---------------------------------------------------------------------------
 # Вспомогательные
 # ---------------------------------------------------------------------------
 def _norm(text: str) -> str:
-    return re.sub(r'[\s\u00a0]+', ' ', text).strip().lower()
+    text = re.sub(r'[\s\u00a0]+', ' ', text)
+    text = re.sub(r'[\uf000-\uf8ff]', '', text)       # PUA-символы Docling — шум
+    text = re.sub(r'[—–]', '-', text)                  # тире как в PDF («-»)
+    text = re.sub(r'\s+([,.;:])', r'\1', text)         # «g , кг/с» → «g, кг/с»
+    text = re.sub(r'\(\s+', '(', text)
+    text = re.sub(r'\s+\)', ')', text)
+    text = re.sub(r'(?<=[а-яёa-z0-9])\s+(?=[0-9])', '', text)  # «м 3» → «м3»
+    return text.strip().lower()
+
+
+def _span_is_math(span: Dict) -> bool:
+    f = (span.get('font') or '').lower()
+    return any(ind in f for ind in _MATH_FONT_INDICATORS)
+
+
+def _line_math_share(spans: List[Dict]) -> float:
+    total = sum(len(s['text']) for s in spans)
+    if not total:
+        return 0.0
+    math_n = sum(len(s['text']) for s in spans if _span_is_math(s))
+    return math_n / total
 
 
 def _collect_doc_text_by_page(blocks: List[Dict]) -> Dict[int, str]:
@@ -58,6 +84,9 @@ def _collect_doc_text_by_page(blocks: List[Dict]) -> Dict[int, str]:
                     for cb in cell.get('block', []):
                         if cb.get('content'):
                             texts.append(cb['content'])
+            for col in b.get('columns', []):
+                if col:
+                    texts.append(col)
         full = ' '.join(texts)
         if full.strip():
             page_text[pno] = page_text.get(pno, ' ') + _norm(full)
@@ -177,6 +206,25 @@ def restore_bboxes(json_result: Dict, pdf_path: str,
     return matched
 
 
+def _flush_enriched_paragraph(blocks: List[Dict], bbox_map: Dict, pno: int,
+                              x0: float, y0: float, x1: float, y1: float,
+                              para_lines: List[str], counter: List[int]) -> None:
+    """Склеивает строки PyMuPDF-блока в один параграф (фрагменты разорванных абзацев)."""
+    content = ' '.join(l.strip() for l in para_lines if l.strip())
+    if not content:
+        return
+    blocks.append({
+        'type': 'paragraph',
+        'page number': pno,
+        'content': content,
+        'bounding box': [round(x0, 1), round(y0, 1), round(x1, 1), round(y1, 1)],
+        '_enriched': True,
+    })
+    counter[0] += 1
+    bbox_map[(_norm(content), pno)] = [round(x0, 1), round(y0, 1),
+                                       round(x1, 1), round(y1, 1)]
+
+
 # ---------------------------------------------------------------------------
 # Enrich: добор пропущенного Docling'ом
 # ---------------------------------------------------------------------------
@@ -198,7 +246,7 @@ def enrich_blocks_from_pdf(
     pdf = fitz.open(pdf_path)
     blocks = json_result.get('content', {}).get('document', {}).get('block', [])
     bbox_map: Dict = {}
-    added = 0
+    added_cnt = [0]
     formula_img_seq = defaultdict(int)
 
     doc_text_by_page = _collect_doc_text_by_page(blocks)
@@ -211,6 +259,8 @@ def enrich_blocks_from_pdf(
         page = pdf[pno - 1]
         page_h = page.rect.height
         page_doc_text = doc_text_by_page.get(pno, '')
+        page_doc_text_flat = page_doc_text.replace(' ', '')
+        last_formula_idx = None
 
         for b in page.get_text('dict', sort=True)['blocks']:
             # ---------- ИЗОБРАЖЕНИЯ (кандидаты в формулы) ----------
@@ -232,72 +282,89 @@ def enrich_blocks_from_pdf(
             if b['type'] != 0:
                 continue
 
-            line_texts = []
-            line_fonts = set()
-            for line in b['lines']:
-                line_text = ''.join(span['text'] for span in line['spans']).strip()
-                if not line_text or len(line_text) < 3:
-                    continue
-                line_texts.append(line_text)
-                for span in line['spans']:
-                    line_fonts.add((span.get('font', '') or '').lower())
-
-            if not line_texts:
-                continue
-            ttext = ' '.join(line_texts)
-            t_norm = _norm(ttext)
-
-            # Уже есть в Docling
-            if page_doc_text and t_norm in page_doc_text:
-                continue
-
-            # Номера страниц
-            if _NUM_RE.match(ttext.strip()):
-                continue
-
             bx0, by0, bx1, by1 = b['bbox']
 
-            is_caption = 'рис' in ttext.lower() and len(ttext) <= 80
-            is_header = by1 < page_h * 0.15
-            is_footer = by0 > page_h * 0.85
-            is_math_font = any(
-                any(ind in f for ind in _MATH_FONT_INDICATORS)
-                for f in line_fonts
-            )
-
-            if is_math_font:
-                label = 'formula'
-            elif is_caption or is_header or is_footer:
-                label = 'paragraph'
-            else:
-                label = 'paragraph'
-
-            if label != 'formula':
-                ttext_cleaned = soft_clean_line(ttext)
-                if is_garbage_line(ttext_cleaned):
+            lines = []
+            for line in b['lines']:
+                line_text = remove_spaced_letters(
+                    ''.join(span['text'] for span in line['spans'])
+                ).strip()
+                if not line_text:
                     continue
-                ttext_final = ttext_cleaned
-            else:
-                ttext_final = ttext
+                lines.append((line_text, list(line['spans'])))
 
-            new_block = {
-                'type': label,
-                'page number': pno,
-                'content': ttext_final,
-                'bounding box': [round(bx0, 1), round(by0, 1),
-                                 round(bx1, 1), round(by1, 1)],
-            }
-            if label == 'formula':
-                new_block['latex'] = ''
-            blocks.append(new_block)
-            added += 1
+            pending_paras: List[str] = []
+            for line_text, spans in lines:
+                t_norm = _norm(line_text)
 
-            bbox_map[(t_norm, pno)] = [round(bx0, 1), round(by0, 1),
-                                       round(bx1, 1), round(by1, 1)]
+                # Номер формулы «(5.1.2)» сразу после строки-формулы
+                if _FORMULA_NUM_RE.match(line_text):
+                    if last_formula_idx is not None:
+                        blocks[last_formula_idx]['content'] += ' ' + line_text
+                        last_formula_idx = None
+                    continue
+
+                # Хвостовые цифры-надстрочники: «...по формуле 2 2» → «...по формуле»
+                t_without_digits = _NUM_SUFFIX_RE.sub('', line_text).rstrip()
+                t_norm_nodig = _norm(t_without_digits) if t_without_digits else ''
+
+                # Уже есть в Docling (в т.ч. без пробелов: «Жилыепомещения — ...»)
+                if page_doc_text and (
+                    t_norm in page_doc_text
+                    or (t_norm_nodig and t_norm_nodig in page_doc_text)
+                    or t_norm.replace(' ', '') in page_doc_text_flat
+                ):
+                    continue
+
+                # Номера страниц и строки без букв («± 5 %», «2», «—»)
+                if _NUM_RE.match(line_text.strip()) or not _LETTER_RE.search(line_text):
+                    continue
+
+                # Подпись таблицы «Таблица 2.2.1 Группа холодильного»:
+                # «Таблица N.N.N» — отдельный параграф, остаток строки — в pending
+                m = _TABLE_CAPT_RE.match(line_text)
+                if m:
+                    caption = m.group(0).strip()
+                    if caption:
+                        _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
+                                                  [caption], added_cnt)
+                    rest = line_text[m.end():].strip()
+                    if rest:
+                        pending_paras.append(soft_clean_line(rest))
+                    continue
+
+                math_share = _line_math_share(spans)
+                is_math_line = math_share >= 0.3
+
+                if is_math_line:
+                    if pending_paras:
+                        _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
+                                                  pending_paras, added_cnt)
+                        pending_paras = []
+                    new_block = {
+                        'type': 'formula',
+                        'page number': pno,
+                        'content': line_text,
+                        'latex': '',
+                        'bounding box': [round(bx0, 1), round(by0, 1),
+                                         round(bx1, 1), round(by1, 1)],
+                    }
+                    blocks.append(new_block)
+                    added_cnt[0] += 1
+                    last_formula_idx = len(blocks) - 1
+                else:
+                    cleaned = soft_clean_line(line_text)
+                    if is_garbage_line(cleaned):
+                        continue
+                    pending_paras.append(cleaned)
+
+            if pending_paras:
+                _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
+                                          pending_paras, added_cnt)
 
     pdf.close()
     logger.info("Enrich: added %d blocks (formula_img candidates: %d)",
-                added, sum(formula_img_seq.values()))
+                added_cnt[0], sum(formula_img_seq.values()))
     return bbox_map
 
 
@@ -405,6 +472,20 @@ def inject_missing_image_blocks(
     return added
 
 
+def _iou(a: List[float], b: List[float]) -> float:
+    """IoU двух bbox [x0,y0,x1,y1]."""
+    ix0 = max(a[0], b[0])
+    iy0 = max(a[1], b[1])
+    ix1 = min(a[2], b[2])
+    iy1 = min(a[3], b[3])
+    if ix1 <= ix0 or iy1 <= iy0:
+        return 0.0
+    inter = (ix1 - ix0) * (iy1 - iy0)
+    area_a = (a[2] - a[0]) * (a[3] - a[1])
+    area_b = (b[2] - b[0]) * (b[3] - b[1])
+    return inter / (area_a + area_b - inter)
+
+
 def extract_formula_images(
     json_result: Dict,
     pdf_path: str,
@@ -414,19 +495,34 @@ def extract_formula_images(
     """
     Извлекает formula-изображения из PDF по bbox ('__formula_img__', pno, seq).
     Сохраняет в images_dir, добавляет type: 'formula' блоки в json_result.
+    Пропускает кандидатов, перекрывающих существующие текстовые блоки
+    (растровые таблицы и т.п. не должны становиться формулами).
     """
     keys = [k for k in bbox_map if isinstance(k, tuple) and len(k) == 3 and k[0] == '__formula_img__']
     if not keys:
         return 0
 
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    # bbox существующих блоков (после restore_bboxes), включая изображения —
+    # логотип на титуле не должен становиться формулой
+    existing_bboxes = [
+        b.get('bounding box') for b in blocks
+        if b.get('bounding box') and b.get('bounding box') != [0, 0, 0, 0]
+    ]
+
     os.makedirs(images_dir, exist_ok=True)
     pdf = fitz.open(pdf_path)
-    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
     added = 0
     try:
         for key in sorted(keys, key=lambda x: (x[1], x[2])):
             _prefix, pno, seq = key
-            ix0, iy0, ix1, iy1 = bbox_map[key]
+            img_bbox = bbox_map[key]
+            if existing_bboxes and any(
+                _iou(img_bbox, eb) >= 0.5 for eb in existing_bboxes
+            ):
+                logger.info("Formula image p%d seq %d skipped: overlaps text block", pno, seq)
+                continue
+            ix0, iy0, ix1, iy1 = img_bbox
             page = pdf[pno - 1]
             pix = page.get_pixmap(clip=fitz.Rect(ix0, iy0, ix1, iy1))
             fname = f"formula_p{pno}_{seq}.png"
