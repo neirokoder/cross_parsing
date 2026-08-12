@@ -49,6 +49,47 @@ def _final_cleanup(json_result: Dict) -> None:
               if not (b.get('type') == 'paragraph'
                       and _COLONTITUL_RE.search((b.get('content') or '').lower()))]
 
+    # 4.1a: «где ...» внутри формул Docling → paragraph (пояснение, а не формула)
+    _WHERE_RE = re.compile(r'^где\s')
+    for b in blocks:
+        if (b.get('type') == 'formula'
+                and _WHERE_RE.match((b.get('content') or '').strip())):
+            b['type'] = 'paragraph'
+
+    # 4.1b: склейка фрагментов формул, добавленных PyMuPDF-добором:
+    #       enrich-фрагмент без завершающего «.;:» + следующая enrich-формула,
+    #       начинающаяся с оператора/цифры (продолжение строки) — одна формула.
+    #       Docling-блоки НЕ склеиваются: эталон повторяет их разметку.
+    _TERM_END_RE = re.compile(r'[.;:]\s*$')
+    _CONT_START_RE = re.compile(r'^[0-9+\-−=×()⁄,/]')
+    page_formulas: Dict[int, List[Dict]] = {}
+    for b in blocks:
+        page_formulas.setdefault(b.get('page number', 1), []).append(b)
+    merged_fragments: List[Dict] = []
+    for pno, pbs in page_formulas.items():
+        cur = None
+        for b in pbs:
+            if b.get('type') != 'formula' or (b.get('image_key') or ''):
+                cur = None
+                merged_fragments.append(b)
+                continue
+            text = (b.get('content') or '').strip()
+            prev_text = (cur.get('content') or '').rstrip() if cur else ''
+            if (cur is not None and cur.get('_enriched') and b.get('_enriched')
+                    and prev_text
+                    and not _TERM_END_RE.search(prev_text)
+                    and _CONT_START_RE.match(text)):
+                cur['content'] = prev_text + ' ' + text
+                pb = cur.get('bounding box')
+                cb = b.get('bounding box')
+                if pb and cb and pb != [0, 0, 0, 0] and cb != [0, 0, 0, 0]:
+                    cur['bounding box'] = [min(pb[0], cb[0]), min(pb[1], cb[1]),
+                                           max(pb[2], cb[2]), max(pb[3], cb[3])]
+            else:
+                merged_fragments.append(b)
+                cur = b
+    blocks = merged_fragments
+
     # 4.3: пустые формулы (без текста и без картинки)
     blocks = [b for b in blocks
               if not (b.get('type') == 'formula'
@@ -84,6 +125,12 @@ def _final_cleanup(json_result: Dict) -> None:
                 # заглавная означает новое предложение («Санкт-Петербург» на титуле)
                 if (body_first and body_first[0].islower() and prev_norm
                         and not _PUNCT_END_RE.search(prev_norm)):
+                    # «где …» после формулы («…s мом.і ), где sпромеж.і …») —
+                    # пояснение условных обозначений, а не продолжение предложения
+                    _FORMULA_END_RE = re.compile(r'[)\]]\s*\d?\s*,?\s*$')
+                    if body_first.startswith('где ') and _FORMULA_END_RE.search(prev_norm):
+                        merged.append(b)
+                        continue
                     text = (b.get('content') or '')
                     if m:
                         # Маркер фрагмента («10.1.13 жилые...») относится к началу

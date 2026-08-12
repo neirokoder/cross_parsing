@@ -403,6 +403,11 @@ def enrich_blocks_from_pdf(
                 math_share = _line_math_share(spans)
                 is_math_line = math_share >= 0.3
 
+                # «где ...» — пояснение к формуле, а не формула: даже в math-шрифтах
+                # это обычный абзац (эталон типизирует такие строки как paragraph)
+                if is_math_line and re.match(r'^где\s', line_text.strip()):
+                    is_math_line = False
+
                 if is_math_line:
                     if pending_paras:
                         _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,

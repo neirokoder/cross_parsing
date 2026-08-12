@@ -553,6 +553,150 @@ def _split_lists(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return result
 
 
+def _split_formula_where(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """R1: «формула, где пояснение» → формула + параграф «где …».
+    Режет по «, где», если левая часть содержит «=» (признак формулы).
+    Обобщается: любая формула с пояснением условных обозначений."""
+    _WHERE_RE = re.compile(r',\s+где\b')
+    result: List[Dict[str, Any]] = []
+    for b in blocks:
+        if b.get('type') != 'paragraph':
+            result.append(b)
+            continue
+        content = (b.get('content') or '').strip()
+        m = _WHERE_RE.search(content)
+        if not m or '=' not in content[:m.start()]:
+            result.append(b)
+            continue
+        left = content[:m.start()].rstrip().strip()
+        right = content[m.end():].strip()
+        nb = dict(b)
+        nb['content'] = left
+        nb['type'] = 'formula'
+        nb['_where_formula'] = True
+        result.append(nb)
+        if right:
+            nb2 = dict(b)
+            nb2['content'] = 'где ' + right
+            result.append(nb2)
+    return result
+
+
+def _merge_fragments(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """R2: склеивает обрывки строк: «Протяженность доп» + «= 16° в остальных случаях;»
+    или «θr -» + «угол смещения…». Фрагмент-продолжение не начинается с маркера
+    пункта и не содержит собственного сказуемого; предыдущий блок при этом
+    оканчивается НЕ на терминатор предложения."""
+    _FRAG_START_RE = re.compile(r'^(=|\d{1,2}\s*[+\-−)]|1/2|−|[)\]])')
+    _TERM_RE = re.compile(r'[.!?;:]\s*$')
+    result: List[Dict[str, Any]] = []
+    for b in blocks:
+        if not result:
+            result.append(b)
+            continue
+        bt = b.get('type')
+        content = (b.get('content') or '').strip()
+        if not content:
+            result.append(b)
+            continue
+        prev = result[-1]
+        prev_text = (prev.get('content') or '').rstrip()
+        prev_term = _TERM_RE.search(prev_text)
+        if (bt in ('paragraph', 'formula', 'list')
+                and prev.get('type') in ('paragraph', 'formula', 'list')
+                and prev.get('page number') == b.get('page number')
+                and not prev_term
+                and _FRAG_START_RE.match(content)):
+            if prev.get('type') == 'list' and bt == 'formula':
+                pass
+            prev['content'] = prev_text + ' ' + content
+            continue
+        result.append(b)
+    return result
+
+
+def _split_list_before_mark(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """R3: режет список перед элементом с маркером пункта, если предыдущий
+    элемент без маркера и завершён («Стадия затопления — … равновесия.»
+    → «2.5.1.1 Фактор s …»). Обобщается: немаркированный вводный элемент
+    списка не может предшествовать новому пункту."""
+    _TERM_RE = re.compile(r'[.;:]\s*$')
+    result: List[Dict[str, Any]] = []
+    for b in blocks:
+        if b.get('type') != 'list':
+            result.append(b)
+            continue
+        items = b.get('items', [])
+        texts = [it.get('content', '') if isinstance(it, dict) else str(it)
+                 for it in items]
+        cuts = [i for i in range(1, len(texts))
+                if _MARK_RE.match(texts[i])
+                and not (_MARK_RE.match(texts[i - 1]) or _SUBMARK_RE.match(texts[i - 1]))
+                and _TERM_RE.search(texts[i - 1].rstrip())]
+        if not cuts:
+            result.append(b)
+            continue
+        start = 0
+        for c in cuts:
+            result.append({**b, 'items': items[start:c],
+                           'content': '\n'.join(texts[start:c])})
+            start = c
+        result.append({**b, 'items': items[start:],
+                       'content': '\n'.join(texts[start:])})
+    return result
+
+
+def _split_zero_if(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """R4: «…°. = 0, если …» → отдельный параграф. Обобщается: условие
+    обнуления фактора после завершённого предложения начинается с «= 0, если»."""
+    _ZERO_IF_RE = re.compile(r'(?<=\.)\s+(?==\s*0,\s*если\b)')
+    result: List[Dict[str, Any]] = []
+    for b in blocks:
+        if b.get('type') != 'paragraph':
+            result.append(b)
+            continue
+        content = (b.get('content') or '')
+        m = _ZERO_IF_RE.search(content)
+        if not m:
+            result.append(b)
+            continue
+        left = content[:m.start()].strip()
+        right = content[m.end():].strip()
+        if left:
+            result.append({**b, 'content': left})
+        if right:
+            result.append({**b, 'content': right})
+    return result
+
+
+def _merge_adjacent_lists(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Склеивает соседние списки одной страницы, когда следующий начинается
+    с маркера пункта («4.1.2 ...» → «4.1.3 ...») или подпункта («.7 ...» → «1.4.7 ...»),
+    а предыдущий оканчивается на «.;:». Docling режет такие последовательности
+    на отдельные <ul>, эталон держит одним; списки с незавершённым последним
+    пунктом («...точкой ил») НЕ склеиваются."""
+    _END_RE = re.compile(r'[.;:]\s*$')
+    result: List[Dict[str, Any]] = []
+    for b in blocks:
+        if result and b.get('type') == 'list':
+            prev = result[-1]
+            items = b.get('items', [])
+            first = items[0].get('content', '') if items and isinstance(items[0], dict) else (str(items[0]) if items else '')
+            prev_text = prev.get('content') or ''
+            if (prev.get('type') == 'list'
+                    and prev.get('page number') == b.get('page number')
+                    and _END_RE.search(prev_text.rstrip())
+                    and (_MARK_RE.match(first) or _SUBMARK_RE.match(first))):
+                prev_items = prev.get('items', [])
+                prev_items.extend(items)
+                prev['content'] = '\n'.join(
+                    it.get('content', '') if isinstance(it, dict) else str(it)
+                    for it in prev_items)
+                continue
+        result.append(b)
+    return result
+
+
 def _norm_for_key(b: Dict[str, Any]) -> str:
     """Нормализованный текст блока для дедупликации (как в compare.py)."""
     bt = b.get('type', '')
@@ -635,6 +779,10 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
     _apply_spaced_letters(all_blocks)
     all_blocks = _split_merged_paragraphs(all_blocks)
     all_blocks = _split_lists(all_blocks)
+    all_blocks = _split_list_before_mark(all_blocks)
+    all_blocks = _split_formula_where(all_blocks)
+    all_blocks = _merge_fragments(all_blocks)
+    all_blocks = _split_zero_if(all_blocks)
     _trim_heading_suffix(all_blocks)
     all_blocks = _dedup_blocks(all_blocks)
 
@@ -686,6 +834,11 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
         r'|[\uAC00-\uD7AF]'  # Корейское
         r'|[\uFE00-\uFE0F]'  # Variation selectors (эмодзи)
     )
+    # Строка из ≥4 кириллических слов (токенов) — признак предложения, а не формулы;
+    # «если …» — условие (эталон держит условия параграфами); отдельные обозначения
+    # внутри формулы («…или s кон.𝑖…», «…( Протяженность /7)…») допустимы.
+    _CYR_TOKEN_RE = re.compile(r'(?:^|\s)([а-яёА-ЯЁ]+)(?=\s|$|[,.;:])')
+    _CYR_START_RE = re.compile(r'^[а-яёА-ЯЁ«]')
     for b in all_blocks:
         if b.get('type') not in ('paragraph', 'formula'):
             continue
@@ -693,9 +846,14 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
         has_math = _FORMULA_RE.search(content) if content else False
         if has_math:
             b['type'] = 'formula'
-        # Фильтр: сбрасываем формулу если есть заведомо не-формульные символы
-        if b.get('type') == 'formula' and content and _FORMULA_FORBIDDEN_RE.search(content):
-            b['type'] = 'paragraph'
+        # Фильтр: сбрасываем формулу, если это предложение — начинается с кириллицы,
+        # содержит ≥4 кириллических слова или условие «если …» (демоут не трогает
+        # формулы, выделенные из «формула, где …»)
+        if b.get('type') == 'formula' and content and not b.get('_where_formula'):
+            cyr_tokens = _CYR_TOKEN_RE.findall(content)
+            if _CYR_START_RE.match(content) or len(cyr_tokens) >= 4 or 'если' in content:
+                b['type'] = 'paragraph'
+        b.pop('_where_formula', None)
 
     # Финальный фильтр: контент только из цифр/разделителей (без букв, без точки — коды классификации не трогать)
     all_blocks = [
