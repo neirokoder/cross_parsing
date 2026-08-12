@@ -1,12 +1,14 @@
-import os, sys, json, re, html as htmlmod
+import os, sys, json, re
 
 sys.stdout.reconfigure(encoding='utf-8')
 ROOT = r'C:\Projects\University\Cross_parsing'
 
 def main():
-    pages = [int(a) for a in sys.argv[1:]] or list(range(1, 42))
+    name = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].isdigit() else '2-020101-174-12'
+    args = sys.argv[1:] if name != sys.argv[1] else sys.argv[2:]
+    pages = [int(a) for a in args] or list(range(1, 100))
     raw_dir = os.path.join(ROOT, 'work', 'etalon_build', 'raw')
-    out = json.load(open(os.path.join(ROOT, 'data', 'output', '2-020101-174-12.json'), encoding='utf-8'))
+    out = json.load(open(os.path.join(ROOT, 'data', 'output', f'{name}.json'), encoding='utf-8'))
     blocks = out['content']['document']['block']
     by_page = {}
     for b in blocks:
@@ -19,7 +21,7 @@ def main():
             txt = open(tf, encoding='utf-8').read()
             buf.append('--- PDF text ---')
             buf.append(txt)
-        hf = os.path.join(ROOT, 'data', 'html', '2-020101-174-12', f'page_{pno:04d}.html')
+        hf = os.path.join(ROOT, 'data', 'html', name, f'page_{pno:04d}.html')
         if os.path.exists(hf):
             h = open(hf, encoding='utf-8').read()
             h = re.sub(r'<head>.*?</head>', '', h, flags=re.S)
@@ -37,7 +39,7 @@ def main():
                 t = ' || '.join(rows)[:1500]
             buf.append(f"[{b['type']}] {t[:400]}")
         buf.append('')
-    fn = os.path.join(ROOT, 'work', 'etalon_build', 'pages_dump.txt')
+    fn = os.path.join(ROOT, 'work', 'etalon_build', f'pages_dump_{name}.txt')
     with open(fn, 'w', encoding='utf-8') as f:
         f.write('\n'.join(buf))
     print('written', fn, 'pages', pages)
