@@ -27,6 +27,9 @@ def _norm_text(text: str) -> str:
     text = re.sub(r'[\s\u00a0]+', ' ', text)
     text = re.sub(r'[—–]', '-', text)
     text = re.sub(r'\s+([,.;:])', r'\1', text)
+    # разрядка в PDF: серия одиночных букв, разделённых пробелами («з а т о п л е н и я» → «затопления»)
+    text = re.sub(r'(?<=\b[а-яёa-zА-ЯЁA-Z])(?: [а-яёa-zА-ЯЁA-Z]){2,}(?![а-яёa-zА-ЯЁA-Z])',
+                  lambda m: m.group(0).replace(' ', ''), text)
     text = re.sub(r'\(\s+', '(', text)
     text = re.sub(r'\s+\)', ')', text)
     text = re.sub(r'(?<=[а-яёa-z0-9])\s+(?=[0-9])', '', text)  # «м 3» → «м3»
