@@ -97,6 +97,89 @@ def _final_cleanup(json_result: Dict) -> None:
                       and not (b.get('latex') or '').strip()
                       and not (b.get('image_key') or ''))]
 
+    # 4.5: многострочные формулы — слияние по геометрии. Блоки формул одной
+    #      страницы, чьи bbox перекрываются по вертикали и горизонтали (строки
+    #      одной визуальной формулы: Docling-голова + enrich-фрагменты),
+    #      сливаются в первый по порядку блок (порядок фрагментов = порядок
+    #      строк PDF, эталон хранит такие формулы одним блоком).
+    def _geo_overlap(a: List[float], b: List[float]) -> bool:
+        # Вертикальное пересечение: строки одной визуальной формулы лежат в
+        # одной горизонтальной полосе (продолжения смещены вправо, поэтому
+        # по x они могут не пересекаться вовсе).
+        return min(a[3], b[3]) - max(a[1], b[1]) > 0.5
+
+    merged_formulas: List[Dict] = []
+    skip_ids: set = set()
+    for i, b in enumerate(blocks):
+        if i in skip_ids:
+            continue
+        if b.get('type') == 'formula':
+            bb = b.get('bounding box') or []
+            if bb and any(abs(v) > 0.001 for v in bb):
+                pno = b.get('page number', 1)
+                group = [b]
+                for j in range(i + 1, len(blocks)):
+                    if j in skip_ids:
+                        continue
+                    o = blocks[j]
+                    obb = o.get('bounding box') or []
+                    if (o.get('type') == 'formula'
+                            and o.get('page number') == pno
+                            and obb and any(abs(v) > 0.001 for v in obb)
+                            and _geo_overlap(bb, obb)):
+                        group.append(o)
+                        skip_ids.add(j)
+                if len(group) > 1:
+                    parts = [g.get('content') or '' for g in group]
+                    b['content'] = ' '.join(p.strip() for p in parts if p.strip())
+                    b['bounding box'] = [min(g['bounding box'][0] for g in group),
+                                         min(g['bounding box'][1] for g in group),
+                                         max(g['bounding box'][2] for g in group),
+                                         max(g['bounding box'][3] for g in group)]
+        merged_formulas.append(b)
+    blocks = merged_formulas
+
+    # 4.6: Docling режет строку формулы пополам — «θ𝑟= θ𝑔» (formula) + «для
+    #      ρ ≤1400 кг/м3 (жидкий груз);» (paragraph). Приклеиваем к формуле
+    #      короткий параграф-хвост условия, лежащий на той же строке правее
+    #      формулы (эталон хранит формулу с условием одним блоком).
+    def _is_formula_tail(t: str) -> bool:
+        t = t.strip()
+        if not t or len(t) >= 70 or not t[0].islower():
+            return False
+        return t.split(maxsplit=1)[0] in ('для', 'при', 'если')
+
+    merged_tails: List[Dict] = []
+    skip_tails: set = set()
+    for i, b in enumerate(blocks):
+        if i in skip_tails:
+            continue
+        if b.get('type') == 'formula':
+            bb = b.get('bounding box') or []
+            if bb and any(abs(v) > 0.001 for v in bb):
+                pno = b.get('page number', 1)
+                for j in range(len(blocks)):
+                    if j == i or j in skip_tails:
+                        continue
+                    o = blocks[j]
+                    obb = o.get('bounding box') or []
+                    if (o.get('type') == 'paragraph'
+                            and o.get('page number') == pno
+                            and obb and any(abs(v) > 0.001 for v in obb)
+                            and obb[0] >= bb[0]
+                            and _geo_overlap(bb, obb)
+                            and _is_formula_tail(o.get('content') or '')):
+                        b['content'] = '{} {}'.format(
+                            (b.get('content') or '').strip(), (o.get('content') or '').strip())
+                        b['bounding box'] = [min(b['bounding box'][0], obb[0]),
+                                             min(b['bounding box'][1], obb[1]),
+                                             max(b['bounding box'][2], obb[2]),
+                                             max(b['bounding box'][3], obb[3])]
+                        skip_tails.add(j)
+                        break
+        merged_tails.append(b)
+    blocks = merged_tails
+
     # 4.4: склейка разорванных Docling-абзацев (фрагменты идут сразу за основным
     #      блоком на той же странице): «...на плотность всей» + «системы холодиль-
     #      ного агента...» → один абзац. Маркерный фрагмент «10.1.13 жилые...»
@@ -342,6 +425,11 @@ def cross_parse(
         # bbox нужен ДО extract_formula_images (IoU-отсев таблиц-растров)
         matched = pdf_extract.restore_bboxes(json_result, str(pdf_path), bbox_map)
         logger.info("Bbox: restored %d block positions", matched)
+
+        # Добор bbox из docling_document.json (prov текстов Docling, BOTTOMLEFT)
+        matched = pdf_extract.restore_docling_bboxes(
+            json_result, str(html_dir / 'docling_document.json'))
+        logger.info("Docling bbox: restored %d block positions", matched)
 
         pdf_images = pdf_extract.save_images_from_pdf(str(pdf_path), str(use_dir))
         pdf_extract.update_image_keys(json_result, str(use_dir))

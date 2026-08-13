@@ -16,6 +16,7 @@ PyMuPDF-движок кросс-парсинга: добор пропущенн�
 адаптирована на уровень JSON-блоков (без DoclingDocument).
 """
 import io
+import json
 import logging
 import os
 import re
@@ -39,6 +40,18 @@ _NUM_SUFFIX_RE = re.compile(r'[\d\s]+\s*$')          # хвост «...форм�
 _FORMULA_NUM_RE = re.compile(r'^\(\d{1,2}(?:\.\d{1,2})+\)$')  # «(5.1.2)»
 # Подпись таблицы: «Таблица 2.2.1 Группа холодильного» → «Таблица 2.2.1» + хвост
 _TABLE_CAPT_RE = re.compile(r'^Таблица\s+\d{1,2}(?:\.\d{1,2}){1,2}($|\s)')
+# Символьные паттерны формул (эвристика): мат. операторы и символы,
+# греческие буквы. Без '-', '/', скобок, '+' — они часты в обычной прозе
+# и в индексах формул («x1j+1»)
+_FORMULA_HINT_RE = re.compile(
+    r'[=×÷±·≤≥≈≠∑∫√∞∂∆^_]'
+    r'|[αβγδεζηθικλμνξπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ]'
+)
+# Демоут формулы в параграф: начинается с кириллицы, ≥4 кириллических
+# слов или условие «если …» (guide.md п.6; для enrich-строк фильтр
+# html_to_json не применяется)
+_CYR_TOKEN_RE = re.compile(r'(?:^|\s)([а-яёА-ЯЁ]+)(?=\s|$|[,.;:])')
+_CYR_START_RE = re.compile(r'^[а-яёА-ЯЁ«]')
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +113,9 @@ def build_bbox_map(pdf_path: str, pages: Optional[List[int]] = None) -> Dict:
     """
     Строит карту bbox по тексту PyMuPDF: {(norm_text, pno): [x0,y0,x1,y1]}.
     Координаты в TOPLEFT (y растёт вниз) — как в итоговом JSON.
+    Индексируются СТРОКИ (line), а не блоки: у блоков PyMuPDF несколько
+    независимых формул могут оказаться в одном bbox, что ломает
+    геометрическую привязку (см. слияние многострочных формул).
     """
     bbox_map: Dict = {}
     pdf = fitz.open(pdf_path)
@@ -111,26 +127,30 @@ def build_bbox_map(pdf_path: str, pages: Optional[List[int]] = None) -> Dict:
             for b in page.get_text('dict', sort=True)['blocks']:
                 if b['type'] != 0:
                     continue
-                line_texts = []
                 for line in b['lines']:
                     t = ''.join(span['text'] for span in line['spans']).strip()
-                    if t:
-                        line_texts.append(t)
-                if not line_texts:
-                    continue
-                ttext = ' '.join(line_texts)
-                t_norm = _norm(ttext)
-                if len(t_norm) < 3:
-                    continue
-                bbox_map[(t_norm, pno)] = [round(b['bbox'][0], 1), round(b['bbox'][1], 1),
-                                           round(b['bbox'][2], 1), round(b['bbox'][3], 1)]
+                    if not t:
+                        continue
+                    t_norm = _norm(t)
+                    if len(t_norm) < 3:
+                        continue
+                    lx0, ly0, lx1, ly1 = line['bbox']
+                    bbox_map[(t_norm, pno)] = [round(lx0, 1), round(ly0, 1),
+                                               round(lx1, 1), round(ly1, 1)]
     finally:
         pdf.close()
     return bbox_map
 
 
 def _match_bbox(bbox_map: Dict, pno: int, text: str) -> Optional[List[float]]:
-    """Ищет bbox для текста в bbox_map. Возвращает [x0,y0,x1,y1] или None."""
+    """Ищет bbox для текста в bbox_map. Возвращает [x0,y0,x1,y1] или None.
+
+    Только ТОЧНОЕ совпадение по нормализованному тексту: substring-фолбэки
+    давали ложные bbox (строка «протяженность» в длинной формуле → неверная
+    геометрия и ложные слияния многострочных формул). Карта построчная,
+    поэтому для однострочных блоков точного совпадения достаточно;
+    многострочные добираются из docling_document.json (restore_docling_bboxes).
+    """
     if not text.strip():
         return None
     norm = _norm(text)
@@ -139,15 +159,6 @@ def _match_bbox(bbox_map: Dict, pno: int, text: str) -> Optional[List[float]]:
         key = (candidate, pno)
         if key in bbox_map:
             return bbox_map[key]
-    for key, map_bbox in bbox_map.items():
-        if not isinstance(key, tuple) or len(key) != 2:
-            continue
-        map_text, map_page = key
-        if map_page == pno:
-            if len(norm) > 10 and norm in map_text:
-                return map_bbox
-            if len(map_text) > 10 and map_text in norm:
-                return map_bbox
     return None
 
 
@@ -161,7 +172,15 @@ def _merge_bbox(bboxes: List[List[float]]) -> List[float]:
 def restore_bboxes(json_result: Dict, pdf_path: str,
                    bbox_map: Optional[Dict] = None) -> int:
     """Проставляет bounding box блокам JSON из карты bbox по тексту."""
-    bbox_map = bbox_map or build_bbox_map(pdf_path)
+    if bbox_map:
+        # Карта enrich неполна (строки, уже присутствующие в Docling, в неё
+        # не попадают) — дополняем полной картой PDF; приоритет — enrich-записи
+        # (более точный bbox строки-абзаца).
+        full_map = build_bbox_map(pdf_path)
+        full_map.update(bbox_map)
+        bbox_map = full_map
+    else:
+        bbox_map = build_bbox_map(pdf_path)
     matched = 0
     blocks = json_result.get('content', {}).get('document', {}).get('block', [])
     for block in blocks:
@@ -199,6 +218,12 @@ def restore_bboxes(json_result: Dict, pdf_path: str,
 
         if not text.strip():
             continue
+        # Формулы, созданные enrich, уже имеют ТОЧНЫЙ строчный bbox —
+        # переприсвоение по карте опасно: одинаковые строки («∗L∗/𝐿𝑠;» в двух
+        # формулах) имеют один norm-ключ, и обе получают bbox последней строки.
+        if btype == 'formula' and block.get('bounding box') and any(
+                abs(v) > 0.001 for v in block['bounding box']):
+            continue
         b = _match_bbox(bbox_map, pno, text)
         if b:
             block['bounding box'] = b
@@ -206,23 +231,170 @@ def restore_bboxes(json_result: Dict, pdf_path: str,
     return matched
 
 
+def restore_docling_bboxes(json_result: Dict, docling_json_path: str) -> int:
+    """Проставляет bbox блокам из docling_document.json (prov текстов Docling).
+
+    Docling хранит координаты в BOTTOMLEFT (y от низа страницы) — конвертируем
+    в TOPLEFT через высоту страницы из pages. Заполняются только блоки без
+    bbox (отсутствует или [0,0,0,0]) — PDF-координаты из restore_bboxes
+    приоритетнее. Формулы не трогаются: их текст после подмены из PDF
+    не совпадает с текстом Docling.
+    """
+    if not docling_json_path or not os.path.exists(docling_json_path):
+        return 0
+    try:
+        with open(docling_json_path, encoding='utf-8') as f:
+            doc = json.load(f)
+    except Exception as e:  # noqa: BLE001
+        logger.warning('Docling json read failed: %s', e)
+        return 0
+
+    pages = doc.get('pages') or {}
+    if not isinstance(pages, dict):
+        pages = {}
+
+    def page_height(pno: int) -> Optional[float]:
+        p = pages.get(str(pno))
+        if not p:
+            return None
+        size = p.get('size') or {}
+        return size.get('height')
+
+    # pno -> norm_text -> [x0, y0, x1, y1] (TOPLEFT)
+    text_bbox: Dict[int, Dict[str, List[float]]] = defaultdict(dict)
+    for item in doc.get('texts') or []:
+        item_norm = _norm(item.get('text') or '')
+        if not item_norm:
+            continue
+        provs = item.get('prov') or []
+        if not provs:
+            continue
+        provs = provs[0] if provs and isinstance(provs[0], list) else provs
+        per_page: Dict[int, List[List[float]]] = defaultdict(list)
+        for prov in provs:
+            if not prov:
+                continue
+            pno = prov.get('page_no')
+            bb = prov.get('bbox') or {}
+            if not pno or not bb or 'l' not in bb or 'r' not in bb \
+                    or 't' not in bb or 'b' not in bb:
+                continue
+            h = page_height(pno)
+            if not h:
+                continue
+            top_bbox = [round(float(bb['l']), 1),
+                        round(float(h) - float(bb['b']), 1),
+                        round(float(bb['r']), 1),
+                        round(float(h) - float(bb['t']), 1)]
+            per_page[pno].append(top_bbox)
+        for pno, bboxes in per_page.items():
+            text_bbox[pno][item_norm] = _merge_bbox(bboxes)
+
+    # Таблицы: bbox из prov по порядку следования на странице (Docling-порядок
+    # совпадает с порядком блоков JSON — оба из одного прогона Docling).
+    table_bbox: Dict[int, List[List[float]]] = defaultdict(list)
+    for tbl in doc.get('tables') or []:
+        bboxes = []
+        provs = tbl.get('prov') or []
+        if provs and isinstance(provs[0], list):
+            provs = provs[0]
+        for prov in provs:
+            if not prov:
+                continue
+            pno = prov.get('page_no')
+            bb = prov.get('bbox') or {}
+            if not pno or not bb or 'l' not in bb or 'r' not in bb \
+                    or 't' not in bb or 'b' not in bb:
+                continue
+            h = page_height(pno)
+            if not h:
+                continue
+            bboxes.append([round(float(bb['l']), 1),
+                           round(float(h) - float(bb['b']), 1),
+                           round(float(bb['r']), 1),
+                           round(float(h) - float(bb['t']), 1)])
+        if bboxes:
+            table_bbox[max(prov.get('page_no', 1) for prov in provs
+                           if prov and prov.get('page_no'))].append(_merge_bbox(bboxes))
+
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    matched = 0
+    table_idx: Dict[int, int] = defaultdict(int)
+
+    def is_empty(bb) -> bool:
+        return not bb or all(abs(v) < 0.001 for v in bb)
+
+    for block in blocks:
+        pno = block.get('page number', 1)
+        btype = block.get('type', '')
+        if btype == 'table':
+            if is_empty(block.get('bounding box')):
+                tb = table_bbox.get(pno) or []
+                idx = table_idx[pno]
+                if idx < len(tb):
+                    block['bounding box'] = tb[idx]
+                    matched += 1
+                table_idx[pno] += 1
+            continue
+        if btype not in ('paragraph', 'heading', 'list'):
+            continue
+        pmap = text_bbox.get(pno)
+        if not pmap:
+            continue
+        if btype == 'list':
+            item_bboxes = []
+            for item in block.get('items', []):
+                if not isinstance(item, dict):
+                    continue
+                if is_empty(item.get('bounding box')):
+                    b = pmap.get(_norm(item.get('content') or ''))
+                    if b:
+                        item['bounding box'] = list(b)
+                        item_bboxes.append(b)
+            if item_bboxes and is_empty(block.get('bounding box')):
+                block['bounding box'] = _merge_bbox(item_bboxes)
+                matched += 1
+            continue
+        if not is_empty(block.get('bounding box')):
+            continue
+        b = pmap.get(_norm(block.get('content') or ''))
+        if b:
+            block['bounding box'] = list(b)
+            matched += 1
+    return matched
+
+
 def _flush_enriched_paragraph(blocks: List[Dict], bbox_map: Dict, pno: int,
-                              x0: float, y0: float, x1: float, y1: float,
-                              para_lines: List[str], counter: List[int]) -> None:
-    """Склеивает строки PyMuPDF-блока в один параграф (фрагменты разорванных абзацев)."""
+                              para_lines: List[str], para_bboxes: List[List[float]],
+                              counter: List[int]) -> None:
+    """Склеивает строки PyMuPDF-блока в один параграф (фрагменты разорванных абзацев).
+
+    bbox параграфа: для одной строки — bbox строки (иначе блок PyMuPDF, в котором
+    лежат несколько независимых визуальных областей, даёт общий bbox, ломающий
+    геометрические правила типа склейки формулы с условием «для ...»); для
+    нескольких строк — объединение строк.
+    """
     content = ' '.join(l.strip() for l in para_lines if l.strip())
     if not content:
         return
+    if len(para_lines) == 1:
+        bb = para_bboxes[0]
+    else:
+        bb = [min(pb[0] for pb in para_bboxes),
+              min(pb[1] for pb in para_bboxes),
+              max(pb[2] for pb in para_bboxes),
+              max(pb[3] for pb in para_bboxes)]
     blocks.append({
         'type': 'paragraph',
         'page number': pno,
         'content': content,
-        'bounding box': [round(x0, 1), round(y0, 1), round(x1, 1), round(y1, 1)],
+        'bounding box': [round(bb[0], 1), round(bb[1], 1),
+                         round(bb[2], 1), round(bb[3], 1)],
         '_enriched': True,
     })
     counter[0] += 1
-    bbox_map[(_norm(content), pno)] = [round(x0, 1), round(y0, 1),
-                                       round(x1, 1), round(y1, 1)]
+    bbox_map[(_norm(content), pno)] = [round(bb[0], 1), round(bb[1], 1),
+                                       round(bb[2], 1), round(bb[3], 1)]
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +479,13 @@ def enrich_blocks_from_pdf(
         (math-шрифты → formula, 'рис' → caption, верх/низ страницы → header/footer)
       - bbox добавленных блоков проставляется сразу
 
+    Классификация строки как формулы (по эвристикам):
+      1) математический шрифт (доля math-спанов >= 0.3)
+      2) символьные паттерны: мат. операторы/символы, греческие буквы
+         (кроме «-», «/», скобок, «+» — часты в прозе и в индексах формул);
+         с демоутом в параграф: начинается с кириллицы, ≥4 кириллических
+         слова или условие «если …» (guide.md п.6)
+
     Returns:
         bbox_map: {(norm_text, pno): [l,t,r,b], ('__formula_img__', pno, seq): [...]}
     """
@@ -358,10 +537,11 @@ def enrich_blocks_from_pdf(
                 ).strip()
                 if not line_text:
                     continue
-                lines.append((line_text, list(line['spans'])))
+                lines.append((line_text, list(line['spans']), list(line['bbox'])))
 
             pending_paras: List[str] = []
-            for line_text, spans in lines:
+            pending_pboxes: List[List[float]] = []
+            for line_text, spans, line_bbox in lines:
                 t_norm = _norm(line_text)
 
                 # Номер формулы «(5.1.2)» сразу после строки-формулы
@@ -393,11 +573,12 @@ def enrich_blocks_from_pdf(
                 if m:
                     caption = m.group(0).strip()
                     if caption:
-                        _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
-                                                  [caption], added_cnt)
+                        _flush_enriched_paragraph(blocks, bbox_map, pno,
+                                                  [caption], [line_bbox], added_cnt)
                     rest = line_text[m.end():].strip()
                     if rest:
                         pending_paras.append(soft_clean_line(rest))
+                        pending_pboxes.append(line_bbox)
                     continue
 
                 math_share = _line_math_share(spans)
@@ -408,18 +589,35 @@ def enrich_blocks_from_pdf(
                 if is_math_line and re.match(r'^где\s', line_text.strip()):
                     is_math_line = False
 
+                # Демоут в параграф (guide.md п.6): предложение, начинающееся
+                # с кириллицы, ≥4 кириллических слов или условие «если …».
+                # Только для НЕ-математических шрифтов (символьная эвристика):
+                # строки math-шрифта — реальные формулы («v(H,d) = 0,8(H−d)/7,8,
+                # если (Hm−d) менее или равно 7,8 м;» — эталон держит формулой),
+                # а «K = 1, если θe ≤ θmin»-подобные демоутятся в html_to_json
+                if not is_math_line and _FORMULA_HINT_RE.search(line_text):
+                    cyr_tokens = _CYR_TOKEN_RE.findall(line_text)
+                    if not (_CYR_START_RE.match(line_text) or len(cyr_tokens) >= 4
+                            or 'если' in line_text):
+                        # символьные паттерны: мат. операторы/символы, греческие
+                        is_math_line = True
+
                 if is_math_line:
                     if pending_paras:
-                        _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
-                                                  pending_paras, added_cnt)
+                        _flush_enriched_paragraph(blocks, bbox_map, pno,
+                                                  pending_paras, pending_pboxes, added_cnt)
                         pending_paras = []
+                        pending_pboxes = []
                     new_block = {
                         'type': 'formula',
                         'page number': pno,
                         'content': line_text,
                         'latex': '',
-                        'bounding box': [round(bx0, 1), round(by0, 1),
-                                         round(bx1, 1), round(by1, 1)],
+                        # bbox СТРОКИ, а не блока: у блока PyMuPDF несколько
+                        # независимых формул могут иметь общий bbox, что ломает
+                        # геометрическое слияние многострочных формул
+                        'bounding box': [round(line_bbox[0], 1), round(line_bbox[1], 1),
+                                         round(line_bbox[2], 1), round(line_bbox[3], 1)],
                     }
                     blocks.append(new_block)
                     added_cnt[0] += 1
@@ -429,10 +627,11 @@ def enrich_blocks_from_pdf(
                     if is_garbage_line(cleaned):
                         continue
                     pending_paras.append(cleaned)
+                    pending_pboxes.append(line_bbox)
 
             if pending_paras:
-                _flush_enriched_paragraph(blocks, bbox_map, pno, bx0, by0, bx1, by1,
-                                          pending_paras, added_cnt)
+                _flush_enriched_paragraph(blocks, bbox_map, pno,
+                                          pending_paras, pending_pboxes, added_cnt)
 
     pdf.close()
     logger.info("Enrich: added %d blocks (formula_img candidates: %d)",
@@ -662,10 +861,22 @@ def replace_not_decoded_formulas(
                             bx[2], min(page_h, sy1 + pad),
                         )
                         ft_text = page_obj.get_text('text', clip=clip).strip()
-                        ft_line = ft_text.split('\n')[0].strip() if ft_text else ''
-                        if len(ft_line) >= 3 and not re.match(r'^[\d\s().,-]+$', ft_line):
+                        # Некодированная Docling-формула нередко покрывает
+                        # НЕСКОЛЬКО визуальных строк (группа формул «θr= θg»,
+                        # «θr= 0», ...). get_text разбивает строки по-своему
+                        # (склеивает куски в одну строку) — такие клипы НЕ
+                        # подменяем: строки точнее доберёт enrich (у него
+                        # разбиение на line'ы PyMuPDF), а пустой figure
+                        # уберётся в cleanup. Подменяем только однострочные.
+                        parts = []
+                        for ft_line in ft_text.split('\n'):
+                            ft_line = ft_line.strip()
+                            if len(ft_line) >= 3 \
+                                    and not re.match(r'^[\d\s().,-]+$', ft_line):
+                                parts.append(ft_line)
+                        if len(parts) == 1:
                             replaced += 1
-                            return f'<figure class="formula">{ft_line}</figure>'
+                            return f'<figure class="formula">{parts[0]}</figure>'
                     except Exception:
                         pass
                 return m.group(0)
