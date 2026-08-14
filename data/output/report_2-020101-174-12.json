@@ -1,24 +1,24 @@
 {
   "summary": {
-    "etalon_blocks": 265,
+    "etalon_blocks": 267,
     "result_blocks": 267,
-    "matched": 264,
-    "precision": 0.989,
-    "recall": 0.996,
-    "f1": 0.992,
-    "text_coverage": 0.999,
+    "matched": 267,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "text_coverage": 1.0,
     "type_mismatch": 0,
-    "structure_mismatch": 3,
+    "structure_mismatch": 0,
     "sim_threshold": 0.6
   },
   "by_type": {
     "formula": {
-      "etalon": 0,
+      "etalon": 1,
       "result": 1,
-      "matched": 0,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0
+      "matched": 1,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
     },
     "heading": {
       "etalon": 52,
@@ -37,20 +37,20 @@
       "f1": 1.0
     },
     "list": {
-      "etalon": 45,
-      "result": 45,
-      "matched": 45,
+      "etalon": 44,
+      "result": 44,
+      "matched": 44,
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0
     },
     "paragraph": {
-      "etalon": 164,
-      "result": 165,
-      "matched": 163,
-      "precision": 0.988,
-      "recall": 0.994,
-      "f1": 0.991
+      "etalon": 166,
+      "result": 166,
+      "matched": 166,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
     },
     "table": {
       "etalon": 3,
@@ -114,9 +114,9 @@
     "8": {
       "etalon": 9,
       "result": 9,
-      "matched": 8,
-      "precision": 0.889,
-      "recall": 0.889
+      "matched": 9,
+      "precision": 1.0,
+      "recall": 1.0
     },
     "9": {
       "etalon": 18,
@@ -168,10 +168,10 @@
       "recall": 1.0
     },
     "16": {
-      "etalon": 6,
+      "etalon": 7,
       "result": 7,
-      "matched": 6,
-      "precision": 0.857,
+      "matched": 7,
+      "precision": 1.0,
       "recall": 1.0
     },
     "17": {
@@ -217,10 +217,10 @@
       "recall": 1.0
     },
     "23": {
-      "etalon": 11,
+      "etalon": 12,
       "result": 12,
-      "matched": 11,
-      "precision": 0.917,
+      "matched": 12,
+      "precision": 1.0,
       "recall": 1.0
     },
     "24": {
@@ -350,62 +350,9 @@
       "recall": 1.0
     }
   },
-  "missed": [
-    {
-      "page": 8,
-      "type": "paragraph",
-      "content": "II — воспламеняющиеся, взрывоопасные и токсичные холодильные агенты."
-    }
-  ],
-  "extra": [
-    {
-      "page": 8,
-      "type": "paragraph",
-      "content": "Таблица 2.2.1"
-    },
-    {
-      "page": 16,
-      "type": "paragraph",
-      "content": "Для помещений с устройствами охлаждения, расположенными на стороне высокого давления  холодильного  агента  группы  II  должны  быть  выполнены  требования  3.5.4 в отношении оборудования второго выхода."
-    },
-    {
-      "page": 23,
-      "type": "formula",
-      "content": "𝐺= 𝑞𝑆/𝑟, (5.1.2)"
-    }
-  ],
-  "structure_mismatches": [
-    {
-      "page": 1,
-      "type": "heading",
-      "etalon": {
-        "heading": 2
-      },
-      "result": {
-        "heading": 1
-      }
-    },
-    {
-      "page": 1,
-      "type": "heading",
-      "etalon": {
-        "heading": 2
-      },
-      "result": {
-        "heading": 3
-      }
-    },
-    {
-      "page": 1,
-      "type": "heading",
-      "etalon": {
-        "heading": 2
-      },
-      "result": {
-        "heading": 3
-      }
-    }
-  ],
+  "missed": [],
+  "extra": [],
+  "structure_mismatches": [],
   "etalon_status": [
     "ok",
     "ok",
@@ -656,7 +603,9 @@
     "ok",
     "ok",
     "ok",
-    "missed",
+    "ok",
+    "ok",
+    "ok",
     "ok",
     "ok",
     "ok",
@@ -722,7 +671,6 @@
     "ok",
     "ok",
     "ok",
-    "extra",
     "ok",
     "ok",
     "ok",
@@ -794,7 +742,6 @@
     "ok",
     "ok",
     "ok",
-    "extra",
     "ok",
     "ok",
     "ok",
@@ -824,7 +771,9 @@
     "ok",
     "ok",
     "ok",
-    "extra",
+    "ok",
+    "ok",
+    "ok",
     "ok",
     "ok",
     "ok",

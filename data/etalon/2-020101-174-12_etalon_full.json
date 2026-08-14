@@ -28,7 +28,7 @@
           "type": "heading",
           "page number": 1,
           "content": "ПРАВИЛА",
-          "heading level": 2,
+          "heading level": 1,
           "bounding box": [
             0,
             0,
@@ -52,7 +52,7 @@
           "type": "heading",
           "page number": 1,
           "content": "ЧАСТЬ XII",
-          "heading level": 2,
+          "heading level": 3,
           "bounding box": [
             0,
             0,
@@ -64,7 +64,7 @@
           "type": "heading",
           "page number": 1,
           "content": "ХОЛОДИЛЬНЫЕ УСТАНОВКИ",
-          "heading level": 2,
+          "heading level": 3,
           "bounding box": [
             0,
             0,
@@ -457,15 +457,9 @@
           ]
         },
         {
-          "type": "list",
+          "type": "paragraph",
           "page number": 8,
-          "list_type": "bullet",
-          "content": "II - воспламеняющиеся, взрывоопасные и токсичные холодильные агенты.",
-          "items": [
-            {
-              "content": "II - воспламеняющиеся, взрывоопасные и токсичные холодильные агенты."
-            }
-          ],
+          "content": "Использование хладагентов с ОDР > 0 запрещается.",
           "bounding box": [
             0,
             0,
@@ -476,7 +470,7 @@
         {
           "type": "paragraph",
           "page number": 8,
-          "content": "Использование хладагентов с ОDР > 0 запрещается.",
+          "content": "Таблица 2.2.1",
           "bounding box": [
             0,
             0,
@@ -1541,6 +1535,17 @@
           ]
         },
         {
+          "type": "paragraph",
+          "page number": 16,
+          "content": "Для помещений с устройствами охлаждения, расположенными на стороне высокого давления холодильного агента группы II должны быть выполнены требования 3.5.4 в отношении оборудования второго выхода.",
+          "bounding box": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
           "type": "list",
           "page number": 16,
           "list_type": "bullet",
@@ -1861,6 +1866,17 @@
           "type": "paragraph",
           "page number": 23,
           "content": "Пропускная способность предохранительного клапана G , кг/с, должна быть не менее определяемой по формуле",
+          "bounding box": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "formula",
+          "page number": 23,
+          "content": "G = qS/r, (5.1.2)",
           "bounding box": [
             0,
             0,

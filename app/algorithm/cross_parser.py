@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 _COLONTITUL_RE = re.compile(r'правила классификации и постройки морских судов')
 _FRAG_MARK_RE = re.compile(r'^\d{1,2}\.\d{1,2}(?:\.\d{1,2})+\s')
 _WORD_SPLIT_RE = re.compile(r'[\s,;:.()«»\-]+')
+_PUNCT_STRIP_RE = re.compile(r'[),;:.]+$')
 
 
 def _final_cleanup(json_result: Dict) -> None:
@@ -56,6 +57,44 @@ def _final_cleanup(json_result: Dict) -> None:
         if (b.get('type') == 'formula'
                 and _WHERE_RE.match((b.get('content') or '').strip())):
             b['type'] = 'paragraph'
+
+    # 4.7: Docling режет пояснение «где Np — максимальное число …» на три блока:
+    #      <p>где</p> + <p>Np</p> (обозначение стало формулой) + <p>— описание…</p>.
+    #      Собираем: «где» + формула-одиночка (без «=», без кириллицы и пробелов)
+    #      + параграф, начинающийся с «—-», на той же странице → один параграф.
+    _WHERE_SOLE = re.compile(r'^[—-]')
+    merged_where: List[Dict] = []
+    j = 0
+    while j < len(blocks):
+        b = blocks[j]
+        n1 = blocks[j + 1] if j + 1 < len(blocks) else None
+        n2 = blocks[j + 2] if j + 2 < len(blocks) else None
+        if (b.get('type') == 'paragraph'
+                and (b.get('content') or '').strip() == 'где'
+                and n1 and n1.get('type') == 'formula'
+                and not n1.get('image_key')
+                and n1.get('page number') == b.get('page number')
+                and n2 and n2.get('type') == 'paragraph'
+                and n2.get('page number') == b.get('page number')):
+            ftext = (n1.get('content') or '').strip()
+            if (ftext and ' ' not in ftext and '=' not in ftext
+                    and len(ftext) <= 20
+                    and not re.search(r'[а-яёА-ЯЁ]', ftext)
+                    and _WHERE_SOLE.match(n2.get('content') or '')):
+                b['content'] = 'где {} {}'.format(ftext,
+                                                   (n2.get('content') or '').strip())
+                j += 3
+                merged_where.append(b)
+                continue
+        merged_where.append(b)
+        j += 1
+    blocks = merged_where
+
+    # 4.1c: пустые списки — Docling-артефакты без текста и пунктов
+    blocks = [b for b in blocks
+              if not (b.get('type') == 'list'
+                      and not ((b.get('content') or '').strip())
+                      and not b.get('items'))]
 
     # 4.1b: склейка фрагментов формул, добавленных PyMuPDF-добором:
     #       enrich-фрагмент без завершающего «.;:» + следующая enrich-формула,
@@ -248,6 +287,48 @@ def _final_cleanup(json_result: Dict) -> None:
         merged.append(b)
     blocks = merged
 
+    # 4.10: Docling переставляет фрагменты разорванной строки «X = 0, если …»:
+    #       голова X и хвост фразы свёрнуты в один блок-формулу («sпромеж.𝑖 грузовых
+    #       судов.»), середина «= 0, если …» — отдельным параграфом (вырезана
+    #       _split_zero_if). Восстанавливаем: формула «X = 0» + параграф «если …».
+    _ZERO_EQ_RE = re.compile(r'^=\s*0\s*,')
+    rebuilt: List[Dict] = []
+    skip_rebuild: set = set()
+    for i, b in enumerate(blocks):
+        if i in skip_rebuild:
+            continue
+        if b.get('type') == 'paragraph' and not b.get('_enriched'):
+            text = (b.get('content') or '').strip()
+            m = _ZERO_EQ_RE.match(text)
+            if m:
+                rest = text[m.end():].strip()
+                if rest.startswith('если '):
+                    f = blocks[i + 1] if i + 1 < len(blocks) else None
+                    if (f and f.get('type') == 'formula' and not f.get('image_key')
+                            and f.get('page number') == b.get('page number')):
+                        ftext = (f.get('content') or '').strip()
+                        head, sep, tail = ftext.partition(' ')
+                        if (sep and tail
+                                and re.search(r'[а-яёА-ЯЁ]', tail)
+                                and re.search(r'[\u0370-\u03FF\U0001D400-\U0001D7FF0-9]', head)
+                                and len(head) <= 20
+                                and tail.rstrip().endswith('.')):
+                            rebuilt.append({
+                                'type': 'formula',
+                                'page number': b.get('page number'),
+                                'content': '{} = 0'.format(head),
+                                'latex': '{} = 0'.format(head),
+                                'bounding box': b.get('bounding box') or [0, 0, 0, 0],
+                                '_rebuilt': True,
+                            })
+                            pb = dict(b)
+                            pb['content'] = '{} {}'.format(rest, tail)
+                            rebuilt.append(pb)
+                            skip_rebuild.add(i + 1)
+                            continue
+        rebuilt.append(b)
+    blocks = rebuilt
+
     # 4.2: фрагменты и дубли — по нормализованному тексту в пределах страницы
     page_blocks: Dict[int, List[Dict]] = {}
     for b in blocks:
@@ -311,6 +392,88 @@ def _final_cleanup(json_result: Dict) -> None:
                     if len(words & ow) / len(words) >= 0.9:
                         dropped = True
                         break
+
+        # (i) префикс-дубль enrich-параграфа: первые N-1 слов фрагмента совпадают
+        #     по порядку с началом параграфа-контейнера той же страницы («Суда,
+        #     указанные в 1.1.1.7 … настоящего» — Docling унёс слово «настоящего» в
+        #     конец предыдущего абзаца, строка не распознана как уже-есть и добавлена
+        #     enrich'ом) → фрагмент дублирует начало абзаца, удаляем
+        if not dropped and enriched and b.get('type') == 'paragraph':
+            if not re.search(r'[.!?…:;]\s*$', norm):
+                wb = [w for w in _WORD_SPLIT_RE.split(norm) if len(w) >= 2]
+                if len(wb) >= 5:
+                    for o in others:
+                        if o is b or o.get('type') != 'paragraph':
+                            continue
+                        wo = [w for w in _WORD_SPLIT_RE.split(_norm_for_key(o)) if len(w) >= 2]
+                        if len(wo) > len(wb) and wo[:len(wb) - 1] == wb[:-1]:
+                            dropped = True
+                            break
+
+        # (e) дубль-формула на странице: норм-тексты различаются лишь
+        #     пробелами/завершающей пунктуацией/дефисом («−» vs «-»)
+        #     или потерянным символом (≤3) — enrich-копия = Docling-версия.
+        #     Нечёткое сравнение по словам (≥0.9) тут опасно: «сиамские»
+        #     формулы p20 различаются цифрами индексов.
+        if not dropped and b.get('type') == 'formula':
+            f_flat = re.sub(r'\s+', '', norm)
+            f_core = _PUNCT_STRIP_RE.sub('', f_flat).replace('−', '-')
+            for o in others:
+                if o is b:
+                    break
+                if o.get('type') != 'formula':
+                    continue
+                onorm = _norm_for_key(o)
+                if not onorm:
+                    continue
+                o_flat = re.sub(r'\s+', '', onorm)
+                o_core = _PUNCT_STRIP_RE.sub('', o_flat).replace('−', '-')
+                if f_core == o_core:
+                    dropped = True
+                    break
+                # Подстрока по НОРМАЛИЗОВАННЫМ текстам («−» из PDF → «-» Docling):
+                # «= √(θmax −θ𝑒)/(θmax −θmin)» — хвост «К = √(θmax - θ𝑒 )/(θmax -θmin )»
+                long_c, short_c = (o_core, f_core) if len(o_core) > len(f_core) else (f_core, o_core)
+                if (len(f_flat) < len(o_flat) and short_c in long_c
+                        and len(long_c) - len(short_c) <= 3
+                        and len(short_c) >= 0.5 * len(long_c)):
+                    dropped = True
+                    break
+
+        # (f) фрагмент-формула: норм-текст — подстрока другого блока страницы
+        #     (контейнер ≥1.5× длины фрагмента): «4);» внутри
+        #     «где 𝐶 = 12𝐽𝑏 (– 45 𝐽𝑏 + 4);», «= √(θmax−θ𝑒)/(θmax−θmin)»
+        #     внутри «К = √(...) ...». _rebuilt (4.10) исключаем: восстановленная
+        #     формула «sпромеж.𝑖 = 0» — подстрока старого абзаца-дубля, который
+        #     удаляется отдельно
+        if not dropped and b.get('type') == 'formula' and not b.get('_rebuilt'):
+            f_flat = re.sub(r'\s+', '', norm)
+            if 3 <= len(f_flat) <= 40:
+                for o in others:
+                    if o is b:
+                        continue
+                    onorm = _norm_for_key(o)
+                    o_flat = re.sub(r'\s+', '', onorm) if onorm else ''
+                    if o_flat and f_flat in o_flat and len(o_flat) >= 1.5 * len(f_flat):
+                        dropped = True
+                        break
+
+        # (g) префикс-фрагмент: короткая формула, обрывающаяся на «-»/«=»/«,»,
+        #     повторяющая начало следующей формулы страницы: «θ𝑟 -» перед
+        #     «θ𝑟= θ𝑔 для ρ ≤1400 кг/м3 ...»
+        if not dropped and b.get('type') == 'formula':
+            f_flat = re.sub(r'\s+', '', norm)
+            if len(f_flat) <= 12:
+                core = re.sub(r'[-=,;)]+$', '', f_flat)
+                if len(core) >= 2 and core != f_flat:
+                    for o in others:
+                        if o is b or o.get('type') != 'formula':
+                            continue
+                        onorm = _norm_for_key(o)
+                        o_flat = re.sub(r'\s+', '', onorm) if onorm else ''
+                        if o_flat and o_flat.startswith(core) and len(o_flat) > len(core):
+                            dropped = True
+                            break
 
         if not dropped:
             keep.append(b)

@@ -497,7 +497,9 @@ def enrich_blocks_from_pdf(
 
     doc_text_by_page = _collect_doc_text_by_page(blocks)
 
-    pages_in_doc = sorted(doc_text_by_page.keys()) or list(range(1, pdf.page_count + 1))
+    # Все страницы PDF: страницы без Docling-текста (только картинки, напр.
+    # «Рис. N.N.N-x»-подписи) иначе выпадают из добора
+    pages_in_doc = list(range(1, pdf.page_count + 1))
 
     for pno in pages_in_doc:
         if pno < 1 or pno > pdf.page_count:

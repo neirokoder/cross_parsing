@@ -317,7 +317,7 @@
             352.9700012207031,
             630.7899780273438
           ],
-          "_temp_path": "C:\\Users\\igr-z\\AppData\\Local\\Temp\\cross_parse_2-020101-174-12_iyll8qx1\\page_1_1.png"
+          "_temp_path": "C:\\Users\\igr-z\\AppData\\Local\\Temp\\cross_parse_2-020101-174-12_6o7eb3on\\page_1_1.png"
         },
         {
           "type": "heading",
@@ -875,21 +875,9 @@
           ]
         },
         {
-          "type": "list",
+          "type": "paragraph",
           "page number": 8,
-          "list_type": "bullet",
           "content": "II - воспламеняющиеся, взрывоопасные и токсичные холодильные агенты.",
-          "items": [
-            {
-              "content": "II - воспламеняющиеся, взрывоопасные и токсичные холодильные агенты.",
-              "bounding box": [
-                99.4,
-                162.0,
-                494.3,
-                174.3
-              ]
-            }
-          ],
           "bounding box": [
             99.4,
             162.0,

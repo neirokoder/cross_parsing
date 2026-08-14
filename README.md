@@ -20,9 +20,10 @@ Docling запускается **без OCR** (`do_ocr=false`) и **без OCR-�
 ```
 cross_parsing/
 ├── cli.py                        # CLI: docling-html / parse / compare
+├── guide.md                      # методика эталона и сверки, цикл доводки
 ├── docker-compose.docling.yml    # Docling Serve (CPU)
 ├── requirements.txt
-├── cross_parsing/
+├── app/
 │   ├── config.py                 # URL docling, каталоги данных
 │   ├── docling/
 │   │   ├── serve_client.py       # HTTP-клиент Docling Serve
@@ -35,7 +36,8 @@ cross_parsing/
 │   │   └── text_cleaner.py       # чистка текста из сырого PDF
 │   └── etalon/
 │       ├── compare.py            # сравнение с эталоном (precision/recall/F1)
-│       └── report.py             # отчёты (JSON + Markdown)
+│       ├── report.py             # отчёты (JSON + Markdown)
+│       └── diff_html.py          # HTML-отчёт только по расхождениям
 └── data/
     ├── pdf/      # входные PDF
     ├── html/     # постраничный HTML от Docling (+ metadata.json, docling_document.json)
@@ -90,3 +92,9 @@ python cli.py compare --pdf data/pdf/doc.pdf --etalon data/etalon/doc.json
 3. `compare` — сравнить с эталоном, посмотреть `missed`/`extra` в отчёте.
 4. Правки — в `cross_parsing/algorithm/` (html_to_json.py — структура блоков; pdf_extract.py — enrich, формулы, bbox).
 5. Повторить шаги 2–3 — Docling повторно **не** запускается.
+
+## Методика эталона и сверки
+
+Подробное описание процессов — `guide.md`: создание эталона (ручная разметка в
+`work/etalon_build/markup/` + конвертация), сверка (`cli.py compare`), цикл доводки
+ИИ-агентом до полного совпадения, регресс-ориентир и феноменология документов РС.

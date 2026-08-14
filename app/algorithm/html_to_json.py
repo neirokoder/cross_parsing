@@ -192,11 +192,24 @@ class _PageHtmlParser(HTMLParser):
 
         elif tag in ('ul', 'ol'):
             if self._list_items:
-                self.blocks.append({
-                    'type': 'list',
-                    'list_type': self._list_type,
-                    'items': self._list_items,
-                })
+                items = [it for it in self._list_items]
+                # Римские нумералы «I - …», «II - …», «XII - …» — это продолжение
+                # текста абзаца (перечисление групп/частей), а не маркированный список
+                # (Docling разбивает такие строки пополам: «I - …» в <p>, «II - …» в <li>).
+                # li-элемент без номера пункта/подпункта, начинающийся с римской цифры
+                # перед тире, переводим в paragraph.
+                if self._list_type == 'bullet' and all(
+                        re.match(r'^\s*[IVX]{1,4}\s*[—-]', it) or not it.strip()
+                        for it in items):
+                    for it in items:
+                        if it.strip():
+                            self.blocks.append({'type': 'paragraph', 'text': it.strip()})
+                else:
+                    self.blocks.append({
+                        'type': 'list',
+                        'list_type': self._list_type,
+                        'items': items,
+                    })
             self._list_items = []
             self._list_type = None
 
