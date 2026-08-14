@@ -12,14 +12,17 @@ cross_parsing — CLI.
   python cli.py compare --pdf data/pdf/doc.pdf --etalon data/etalon/doc.json
 """
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
 
 from app.algorithm.cross_parser import cross_parse
+from app.algorithm.json_to_html import json_to_html
 from app.config import ETALON_DIR, HTML_DIR, OUTPUT_DIR
 from app.docling.export_html import generate_html_from_pdf
 from app.etalon.compare import compare
+from app.etalon.diff_html import render_diff_html
 from app.etalon.report import save_json_report, save_markdown_report
 
 
@@ -73,12 +76,24 @@ def cmd_compare(args):
     save_json_report(report, base.with_suffix(".json"))
     save_markdown_report(report, base.with_suffix(".md"))
 
+    # HTML эталона — рядом с HTML результата (чистый, без разметки)
+    etalon_html = result_path.with_name(result_path.stem + "_etalon.html")
+    etalon_data = json.loads(etalon_path.read_text(encoding="utf-8"))
+    json_to_html(etalon_data, etalon_html)
+
+    # Отдельный HTML только с расхождениями (missed/extra/структура)
+    result_data = json.loads(result_path.read_text(encoding="utf-8"))
+    diff_path = out_dir / f"report_{Path(args.pdf).stem}_diff.html"
+    render_diff_html(report, etalon_data, result_data, diff_path)
+
     s = report["summary"]
     print(f"OK: эталон={s['etalon_blocks']} блоков, результат={s['result_blocks']}, "
           f"совпало={s['matched']}")
     print(f"    Precision={s['precision']} | Recall={s['recall']} | F1={s['f1']} | "
           f"coverage={s['text_coverage']}")
     print(f"    Отчёт: {base}.md")
+    print(f"    Сверка: {result_path.with_suffix('.html')} vs {etalon_html}")
+    print(f"    Дифф (только расхождения): {diff_path}")
     return 0
 
 

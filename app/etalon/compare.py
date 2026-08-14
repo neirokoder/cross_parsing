@@ -319,5 +319,9 @@ def compare(
         'missed': missed,
         'extra': extra,
         'structure_mismatches': structure_mismatches,
+        # Статус каждого блока по порядку в JSON (для подсветки в HTML-диффе):
+        # 'ok' | 'missed' (в эталоне, не найдено в результате) | 'extra' (в результате, нет в эталоне)
+        'etalon_status': ['missed' if matches[i] is None else 'ok' for i in range(etalon_n)],
+        'result_status': ['extra' if not used[j] else 'ok' for j in range(result_n)],
     }
     return report

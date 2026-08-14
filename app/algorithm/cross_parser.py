@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app.algorithm.html_to_json import html_to_document_json, _norm_for_key
 from app.algorithm import pdf_extract
+from app.algorithm.json_to_html import json_to_html
 from app.algorithm.quality_metrics import compute_page_quality
 from app.config import HTML_DIR, IMAGES_DIR, OUTPUT_DIR
 
@@ -435,9 +436,10 @@ def cross_parse(
         pdf_extract.update_image_keys(json_result, str(use_dir))
         pdf_extract.inject_missing_image_blocks(json_result, str(use_dir), pdf_images)
         pdf_extract.extract_formula_images(json_result, str(pdf_path), str(use_dir), bbox_map)
-    finally:
+    except Exception:
         if clean_temp and not images_dir:
             shutil.rmtree(tmp_images, ignore_errors=True)
+        raise
 
     # ---- Шаг 5: финальные чистки (колонтитулы, фрагменты, пустые формулы) ----
     _final_cleanup(json_result)
@@ -451,5 +453,11 @@ def cross_parse(
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(json_result, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("Cross-parse result saved to %s", out_json)
+
+    # ---- Шаг 7: HTML из JSON — сразу после создания JSON ----
+    json_to_html(json_result, out_json.with_suffix(".html"))
+
+    if clean_temp and not images_dir:
+        shutil.rmtree(tmp_images, ignore_errors=True)
 
     return json_result
