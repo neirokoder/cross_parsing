@@ -36,6 +36,7 @@ def render_diff_html(
     etalon_data: Dict,
     result_data: Dict,
     out_path: Path,
+    image_sources: Optional[List[Path]] = None,
 ) -> Path:
     """Собирает HTML только с расхождениями и сохраняет его.
 
@@ -44,6 +45,7 @@ def render_diff_html(
         etalon_data: эталонный JSON (raw_ocr_v4)
         result_data: JSON результата (raw_ocr_v4)
         out_path: путь к файлу HTML
+        image_sources: каталоги-фолбэки для файлов image (без _temp_path)
 
     Returns:
         путь к сохранённому HTML
@@ -74,11 +76,11 @@ def render_diff_html(
         for b in missed_pages.get(pno, []):
             items.append(
                 '<div class="diff-item missed"><span class="badge">не найдено в результате'
-                " ({})</span>{}</div>".format(b.get("type", "?"), _block_html(b, _IMG_PLACEHOLDER_DIR)))
+                " ({})</span>{}</div>".format(b.get("type", "?"), _block_html(b, _IMG_PLACEHOLDER_DIR, image_sources)))
         for b in extra_pages.get(pno, []):
             items.append(
                 '<div class="diff-item extra"><span class="badge">лишнее, нет в эталоне'
-                " ({})</span>{}</div>".format(b.get("type", "?"), _block_html(b, _IMG_PLACEHOLDER_DIR)))
+                " ({})</span>{}</div>".format(b.get("type", "?"), _block_html(b, _IMG_PLACEHOLDER_DIR, image_sources)))
         sections.append('<section class="page" data-page="{}"><h2>Стр. {}</h2>{}</section>'.format(
             pno, pno, "".join(items)))
 

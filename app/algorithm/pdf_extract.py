@@ -560,7 +560,8 @@ def enrich_blocks_from_pdf(
                 # Уже есть в Docling (в т.ч. без пробелов: «Жилыепомещения — ...»)
                 if page_doc_text and (
                     t_norm in page_doc_text
-                    or (t_norm_nodig and t_norm_nodig in page_doc_text)
+                    or (t_norm_nodig and not t_norm_nodig.endswith(('-', '.'))
+                        and t_norm_nodig in page_doc_text)
                     or t_norm.replace(' ', '') in page_doc_text_flat
                 ):
                     continue
@@ -691,9 +692,18 @@ def save_images_from_pdf(pdf_path: str, images_dir: str) -> List[Tuple[int, str,
     return result
 
 
-def update_image_keys(json_result: Dict, images_dir: str) -> int:
-    """Проставляет image_key в JSON-блоках 'image' по сохранённым файлам."""
+def update_image_keys(
+    json_result: Dict,
+    images_dir: str,
+    pdf_images: Optional[List[Tuple[int, str, str, List[float]]]] = None,
+) -> int:
+    """Проставляет image_key в JSON-блоках 'image' по сохранённым файлам.
+    Если блок ещё без bbox и в pdf_images есть запись с тем же файлом —
+    берёт позицию изображения из PDF (Docling-фигуры без геометрии)."""
     blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    bbox_by_path = {}
+    if pdf_images:
+        bbox_by_path = {path: bbox for _pno, path, _ext, bbox in pdf_images}
     counter_per_page: Dict[int, int] = {}
     updated = 0
     for block in blocks:
@@ -707,6 +717,11 @@ def update_image_keys(json_result: Dict, images_dir: str) -> int:
         if os.path.exists(fpath):
             block['image_key'] = 'images/' + fname
             block['_temp_path'] = fpath
+            cur = block.get('bounding box') or [0, 0, 0, 0]
+            if cur == [0, 0, 0, 0]:
+                bbox = bbox_by_path.get(fpath)
+                if bbox and any(abs(v) > 0.001 for v in bbox):
+                    block['bounding box'] = [round(v, 1) for v in bbox]
             updated += 1
     return updated
 

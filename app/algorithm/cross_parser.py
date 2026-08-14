@@ -11,9 +11,8 @@
 """
 import json
 import logging
+import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -21,7 +20,7 @@ from app.algorithm.html_to_json import html_to_document_json, _norm_for_key
 from app.algorithm import pdf_extract
 from app.algorithm.json_to_html import json_to_html
 from app.algorithm.quality_metrics import compute_page_quality
-from app.config import HTML_DIR, IMAGES_DIR, OUTPUT_DIR
+from app.config import BASE_DIR, HTML_DIR, IMAGES_DIR, OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -478,7 +477,53 @@ def _final_cleanup(json_result: Dict) -> None:
         if not dropped:
             keep.append(b)
 
-    json_result['content']['document']['block'] = keep
+    # 4.11: подпись «Рис. N.N.N-N» — сразу под своим рисунком. Docling/enrich
+    #       выносят подписи отдельно от image-блоков (bbox [0,0,0,0] или подписи
+    #       вперемешку), порядок съезжает. Ставим каждую подпись непосредственно
+    #       после изображения на той же странице, лежащего выше неё (ближайшего).
+    _CAPTION_RE = re.compile(r'^Рис\.\s*\d+(?:\.\d+)+\s*-\s*\d+\s*\.?\s*$')
+    reordered: List[Dict] = []
+    by_page_idx: Dict[int, List[Dict]] = {}
+    for b in keep:
+        by_page_idx.setdefault(b.get('page number', 1), []).append(b)
+    for pno, pbs in by_page_idx.items():
+        images = [b for b in pbs
+                  if b.get('type') == 'image' and b.get('image_key')
+                  and (b.get('bounding box') or [0, 0, 0, 0]) != [0, 0, 0, 0]]
+        captions = [b for b in pbs
+                    if b.get('type') == 'paragraph'
+                    and re.match(_CAPTION_RE, (b.get('content') or '').strip())
+                    and (b.get('bounding box') or [0, 0, 0, 0]) != [0, 0, 0, 0]]
+        if not images or not captions:
+            reordered.extend(pbs)
+            continue
+        cap_to_img: Dict[int, Dict] = {}
+        used_imgs = set()
+        for c in captions:
+            cy0 = c['bounding box'][1]
+            best, best_gap = None, None
+            for im in images:
+                im_id = id(im)
+                if im_id in used_imgs:
+                    continue
+                iy1 = im['bounding box'][3]
+                gap = cy0 - iy1
+                if -2 <= gap and (best_gap is None or gap < best_gap):
+                    best, best_gap = im, gap
+            if best is not None:
+                cap_to_img[id(c)] = best
+                used_imgs.add(id(best))
+        for b in pbs:
+            cid = id(b)
+            if cid in cap_to_img:
+                continue
+            reordered.append(b)
+            for pair in cap_to_img.items():
+                if pair[1] is b:
+                    reordered.append(next(o for o in pbs if id(o) == pair[0]))
+    blocks = reordered
+
+    json_result['content']['document']['block'] = blocks
     logger.info("Cleanup: %d -> %d blocks", len(blocks), len(keep))
 
 
@@ -544,9 +589,10 @@ def cross_parse(
         pdf_path: путь к исходному PDF (движок PyMuPDF)
         html_dir: каталог с page_XXXX.html от Docling (см. docling-html);
                   если None — ищется data/html/{stem}/
-        images_dir: куда сохранять изображения (по умолчанию data/images/{stem}_tmp/)
+        images_dir: куда сохранять изображения (по умолчанию data/images/{stem}/)
         out_json: путь для сохранения результата (по умолчанию data/output/{stem}.json)
-        clean_temp: удалять временный каталог изображений после обработки
+        clean_temp: оставлен для совместимости; изображения всегда сохраняются
+                    в рабочей папке и не удаляются
 
     Returns:
         JSON документа (содержит content.document, content.quality)
@@ -575,8 +621,8 @@ def cross_parse(
         json_result["content"]["document"]["pages"] = metadata["pages"]
 
     # ---- Шаг 4: PyMuPDF-движок: добор, формулы, картинки, bbox ----
-    tmp_images = Path(tempfile.mkdtemp(prefix=f"cross_parse_{stem}_"))
-    use_dir = Path(images_dir) if images_dir else tmp_images
+    tmp_images = Path(images_dir) if images_dir else (IMAGES_DIR / stem)
+    use_dir = tmp_images
     use_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -596,12 +642,10 @@ def cross_parse(
         logger.info("Docling bbox: restored %d block positions", matched)
 
         pdf_images = pdf_extract.save_images_from_pdf(str(pdf_path), str(use_dir))
-        pdf_extract.update_image_keys(json_result, str(use_dir))
+        pdf_extract.update_image_keys(json_result, str(use_dir), pdf_images)
         pdf_extract.inject_missing_image_blocks(json_result, str(use_dir), pdf_images)
         pdf_extract.extract_formula_images(json_result, str(pdf_path), str(use_dir), bbox_map)
     except Exception:
-        if clean_temp and not images_dir:
-            shutil.rmtree(tmp_images, ignore_errors=True)
         raise
 
     # ---- Шаг 5: финальные чистки (колонтитулы, фрагменты, пустые формулы) ----
@@ -614,13 +658,18 @@ def cross_parse(
     # ---- Шаг 6: сохранение ----
     out_json = Path(out_json) if out_json else (OUTPUT_DIR / f"{stem}.json")
     out_json.parent.mkdir(parents=True, exist_ok=True)
+
+    # Пути картинок в JSON — относительные от корня проекта (перенос папки
+    # не ломает ссылки); html_to_json резолвит их обратно по BASE_DIR.
+    for blk in json_result.get('content', {}).get('document', {}).get('block', []):
+        tp = blk.get('_temp_path')
+        if tp:
+            blk['_temp_path'] = os.path.relpath(tp, BASE_DIR)
+
     out_json.write_text(json.dumps(json_result, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("Cross-parse result saved to %s", out_json)
 
     # ---- Шаг 7: HTML из JSON — сразу после создания JSON ----
     json_to_html(json_result, out_json.with_suffix(".html"))
-
-    if clean_temp and not images_dir:
-        shutil.rmtree(tmp_images, ignore_errors=True)
 
     return json_result

@@ -69,8 +69,6 @@ class _PageHtmlParser(HTMLParser):
         if tag == 'div':
             self._page_depth += 1
 
-        self._in_figcaption = False
-
         if tag in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
             self._flush_text()
             self._current_tag = tag
@@ -184,8 +182,12 @@ class _PageHtmlParser(HTMLParser):
                     formula_content = ''.join(self._formula_text).strip() or self._figcaption
                     self.blocks.append({'type': 'formula', 'text': formula_content})
                 else:
-                    caption = self._figcaption or ''
-                    self.blocks.append({'type': 'image', 'text': caption})
+                    caption = (self._figcaption or '').strip()
+                    if caption:
+                        self.blocks.append({'type': 'image', 'text': ''})
+                        self.blocks.append({'type': 'paragraph', 'text': caption})
+                    else:
+                        self.blocks.append({'type': 'image', 'text': ''})
 
         elif tag == 'figcaption':
             self._in_figcaption = False
@@ -784,8 +786,10 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
                 has_tables = True
         all_blocks.extend(blocks)
 
-    # Постобработка: группируем caption с изображениями
-    all_blocks = _group_captions_with_images(all_blocks)
+    # Постобработка: группируем caption с изображениями — ОТКЛЮЧЕНО:
+    # эталон хранит подписи отдельными параграфами (img + par «Рис. N…»),
+    # склейка вливает подпись в image-блок и теряет её из потока.
+    # all_blocks = _group_captions_with_images(all_blocks)
 
     # Постобработка Docling-блоков (дефекты A–I):
     # разрядка → склейки параграфов → списки → хвостовые «1» → дубли

@@ -76,15 +76,17 @@ def cmd_compare(args):
     save_json_report(report, base.with_suffix(".json"))
     save_markdown_report(report, base.with_suffix(".md"))
 
-    # HTML эталона — рядом с HTML результата (чистый, без разметки)
+    # HTML эталона — рядом с HTML результата (чистый, без разметки).
+    # Картинки эталона (без _temp_path) берём по имени из папки PNG результата.
     etalon_html = result_path.with_name(result_path.stem + "_etalon.html")
     etalon_data = json.loads(etalon_path.read_text(encoding="utf-8"))
-    json_to_html(etalon_data, etalon_html)
+    result_images = result_path.parent / "{}_images".format(result_path.stem)
+    json_to_html(etalon_data, etalon_html, image_sources=[result_images])
 
     # Отдельный HTML только с расхождениями (missed/extra/структура)
     result_data = json.loads(result_path.read_text(encoding="utf-8"))
     diff_path = out_dir / f"report_{Path(args.pdf).stem}_diff.html"
-    render_diff_html(report, etalon_data, result_data, diff_path)
+    render_diff_html(report, etalon_data, result_data, diff_path, image_sources=[result_images])
 
     s = report["summary"]
     print(f"OK: эталон={s['etalon_blocks']} блоков, результат={s['result_blocks']}, "
